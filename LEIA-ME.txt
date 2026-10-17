@@ -1,0 +1,16 @@
+MAHACH — REVISÃO V3 (2026-10-16)
+
+Abra INICIAR-AQUI.md para instruções e limitações.
+
+IMPORTANTE: O arquivo ZIP NÃO contém sua conta administrativa ou banco antigo.
+Faça backup da V2 e copie private/mahach.sqlite com o servidor desligado
+para a pasta V3 antes de executar npm start, se quiser manter login/pedidos.
+
+Fotos: a planilha importada não contém fotografias. Nenhuma foto externa
+sem licença e verificação foi incluída. O pipeline e os 1.770 registros
+estão prontos para pesquisa e aprovação por lotes com API de busca.
+
+Bling/Mercado Pago/Loggi/Uber/99: NÃO estão autorizados ou conectados.
+Frete Correios/Jadlog por Melhor Envio só é cotado com credenciais válidas.
+
+ATUALIZAÇÃO V3.1 (filtros): leia ATUALIZACAO-FILTROS-V3.1.md antes de substituir arquivos.

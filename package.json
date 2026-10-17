@@ -1,0 +1,15 @@
+{
+  "name": "mahach-loja",
+  "private": true,
+  "version": "5.2.1",
+  "description": "MAHACH V5 — painel administrativo e catálogo com fotos manuais e configurações persistentes",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "admin:create": "node scripts/create-admin.js",
+    "test": "node --test tests/*.test.js"
+  }
+}

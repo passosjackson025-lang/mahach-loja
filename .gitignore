@@ -1,0 +1,5 @@
+.env
+private/*
+!private/.gitkeep
+node_modules/
+*.log
