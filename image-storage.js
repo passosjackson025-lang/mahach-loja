@@ -42,7 +42,16 @@ async function savePhoto(bytes,root){
  let r;
  try{r=await fetch(`https://api.cloudinary.com/v1_1/${c.CLOUDINARY_CLOUD_NAME}/image/upload`,{method:'POST',body:form,signal:AbortSignal.timeout(30000)})}
  catch{throw httpError('Não foi possível enviar a imagem para o armazenamento online. Tente novamente.',502)}
- if(!r.ok)throw httpError('O armazenamento de imagens recusou o upload (HTTP '+r.status+').',502);
+ if(!r.ok){
+ const response=await r.json().catch(()=>({}));
+ const message=String(response?.error?.message||'');
+ const reason=/invalid signature|signature mismatch/i.test(message)?'ASSINATURA_INVALIDA':
+  /invalid api key|unknown api key|api key not found|invalid api_key/i.test(message)?'API_KEY_INVALIDA':
+  /timestamp|time stamp/i.test(message)?'HORARIO_INVALIDO':
+  'AUTORIZACAO_RECUSADA';
+ console.error('[Cloudinary] HTTP '+r.status+' '+reason);
+ throw httpError('O armazenamento recusou o upload (HTTP '+r.status+').',502);
+}
  const data=await r.json().catch(()=>({}));
  if(data.resource_type!=='image'||typeof data.secure_url!=='string')throw httpError('O armazenamento não retornou uma URL de imagem válida.',502);
  let parsed;
