@@ -1,5 +1,9 @@
-.env
-private/*
-!private/.gitkeep
 node_modules/
-*.log
+.env
+.env.*
+!.env.exemplo
+private/
+*.sqlite
+*.sqlite-*
+*.key
+.DS_Store

@@ -1,15 +1,25 @@
 {
-  "name": "mahach-loja",
+  "name": "mahach-site-corrigido-postgres",
   "private": true,
-  "version": "5.2.1",
-  "description": "MAHACH V5 — painel administrativo e catálogo com fotos manuais e configurações persistentes",
+  "version": "5.2.1-pg-admin-v2",
+  "description": "MAHACH - site principal com PostgreSQL e painel (validacao de integracoes pendente)",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "node --env-file-if-exists=.env --watch server.js",
-    "admin:create": "node scripts/create-admin.js",
-    "test": "node --test tests/*.test.js"
+    "admin:create": "node --env-file-if-exists=.env scripts/create-admin.js",
+    "neon:check": "node --env-file-if-exists=.env scripts/check-neon.cjs",
+    "admin:local": "node scripts/start-admin-local.cjs",
+    "test:offline": "node scripts/test-offline.cjs",
+    "test:admin": "node scripts/test-admin-photo.cjs",
+    "test:fotos": "node scripts/test-cloud-storage.cjs",
+    "test:publicacao": "node scripts/testar-publicacao.cjs",
+    "publicacao:check": "node --env-file-if-exists=.env scripts/auditar-publicacao.cjs",
+    "fotos:migrar": "node --env-file-if-exists=.env scripts/migrar-fotos-cloudinary.cjs"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
   }
 }
