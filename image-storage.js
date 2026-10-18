@@ -42,6 +42,25 @@ async function savePhoto(bytes,root){
  let r;
  try{r=await fetch(`https://api.cloudinary.com/v1_1/${c.CLOUDINARY_CLOUD_NAME}/image/upload`,{method:'POST',body:form,signal:AbortSignal.timeout(30000)})}
  catch{throw httpError('Não foi possível enviar a imagem para o armazenamento online. Tente novamente.',502)}
+
+ // Cloudinary Basic Auth fallback: tenta autenticação oficial após HTTP 401.
+ if(r.status===401){
+  const retry=new FormData();
+  retry.append('file',new Blob([bytes],{type:'image/webp'}),publicId+'.webp');
+  retry.append('folder',folder);
+  retry.append('public_id',publicId);
+  const auth='Basic '+Buffer.from(c.CLOUDINARY_API_KEY+':'+c.CLOUDINARY_API_SECRET).toString('base64');
+  try{
+   r=await fetch('https://api.cloudinary.com/v1_1/'+c.CLOUDINARY_CLOUD_NAME+'/image/upload',{
+    method:'POST',
+    headers:{Authorization:auth},
+    body:retry,
+    signal:AbortSignal.timeout(30000)
+   });
+  }catch{
+   throw httpError('Falha na conexão com o armazenamento de imagens.',502);
+  }
+ }
  if(!r.ok){
  const response=await r.json().catch(()=>({}));
  const message=String(response?.error?.message||'');
