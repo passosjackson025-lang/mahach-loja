@@ -5,10 +5,11 @@ const {AsyncLocalStorage}=require('node:async_hooks');
 // Contagens, estoque e flags são inteiros pequenos neste aplicativo.
 types.setTypeParser(20, x=>Number(x));
 const ctx=new AsyncLocalStorage();
-if(!process.env.DATABASE_URL || !/^postgres(?:ql)?:\/\//.test(process.env.DATABASE_URL)) {
- throw Error('DATABASE_URL ausente: não é seguro iniciar sem a conexão PostgreSQL');
+const databaseUrl=String(process.env.DATABASE_URL||'').match(/postgres(?:ql)?:\/\/[^\s'"<>]+/i)?.[0];
+if(!databaseUrl) {
+ throw Error('DATABASE_URL inválida: não é seguro iniciar sem a conexão PostgreSQL');
 }
-const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:true},max:5,
+const pool=new Pool({connectionString:databaseUrl,ssl:{rejectUnauthorized:true},max:5,
  connectionTimeoutMillis:12000,idleTimeoutMillis:30000});
 const TABLES='admins|categories|products|orders|site_settings|sessions';
 const objRe=new RegExp('\\b(FROM|JOIN|INTO|UPDATE|TABLE|REFERENCES)\\s+(?!mahach_stage\\.)(?:"?)('+TABLES+')(?:"?)\\b','gi');
