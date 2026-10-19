@@ -9,7 +9,7 @@
   <div class="checkout-fields"><label>Seu nome completo<input name="name" autocomplete="name" minlength="3" maxlength="120" required></label><label>WhatsApp com DDD<input name="phone" autocomplete="tel" inputmode="tel" pattern="[0-9()+\\s-]{10,20}" placeholder="(11) 99999-9999" required></label><label>E-mail para confirmação do pedido<input type="email" name="email" autocomplete="email" maxlength="200" required></label></div>
   <fieldset><legend>Como deseja receber?</legend><div class="checkout-options">
    <label><input type="radio" name="delivery" value="pickup" checked> Retirar na loja (sem frete)</label>
-   <label><input type="radio" name="delivery" value="correios"> Receber pelos Correios (calcular frete)</label>
+   <label><input type="radio" name="delivery" value="transportadora"> Receber por transportadora (calcular frete)</label>
    <label><input type="radio" name="delivery" value="uber"> Uber (corrida paga separadamente; valor a combinar)</label>
    <label><input type="radio" name="delivery" value="99"> 99Entrega (corrida paga separadamente; valor a combinar)</label>
   </div></fieldset>
@@ -49,7 +49,7 @@
  function updateTotal(){
   const subtotal=items.reduce((acc,x)=>acc+Number(x.p.price)*x.qty,0);
   const delivery=form.elements.delivery.value;
-  const shipping=delivery==='pickup'?0:delivery==='correios'?selectedCost:null;
+  const shipping=delivery==='pickup'?0:delivery==='transportadora'?selectedCost:null;
   const isQuick=delivery==='uber'||delivery==='99';
   const rows=[['Produtos ('+items.reduce((n,x)=>n+x.qty,0)+')',currency(subtotal)],['Frete',isQuick?'Corrida cobrada à parte':shipping===null?'Selecione o frete':currency(shipping)],['Total no checkout',shipping===null&&!isQuick?'A calcular':currency(subtotal+(shipping||0))]];
   const container=q('checkoutTotal');container.replaceChildren();
@@ -62,7 +62,7 @@
   const cash=form.querySelector('[name="payment"][value="cash"]');cash.disabled=delivery;
   if(cash.checked&&delivery)form.querySelector('[name="payment"][value="pix"]').checked=true;
   selectedQuote='';selectedCost=null;q('shippingResults').replaceChildren();q('shippingSelection').textContent='';
-  q('checkoutShippingNotice').textContent=mode==='correios'?'Insira seu CEP e selecione uma das cotações dos Correios antes de pagar.':delivery?'Uber/99: a corrida NÃO está incluída no total e será combinada separadamente com a MAHACH.':pickupAddress?'Retirada sem frete. Local: '+pickupAddress:'Retirada sem frete. Endereço e horário serão informados pela loja.';
+  q('checkoutShippingNotice').textContent=mode==='transportadora'?'Insira seu CEP e escolha uma transportadora habilitada para perfumes antes de pagar.':delivery?'Uber/99: a corrida NÃO está incluída no total e será combinada separadamente com a MAHACH.':pickupAddress?'Retirada sem frete. Local: '+pickupAddress:'Retirada sem frete. Endereço e horário serão informados pela loja.';
   updateTotal();updateSubmitLabel();
  }
  function updateSubmitLabel(){const cash=form.elements.payment.value==='cash';q('submitOrder').textContent=cash?'Registrar pedido para retirada':'Continuar para o Mercado Pago ↗'}
@@ -70,15 +70,15 @@
  form.elements.cep.addEventListener('input',()=>{selectedQuote='';selectedCost=null;q('shippingResults').replaceChildren();q('shippingSelection').textContent='CEP alterado. Consulte novamente o frete.';updateTotal()});
  q('quoteShipping').addEventListener('click',async()=>{
   const cep=form.elements.cep.value.replace(/\D/g,''),out=q('shippingResults');selectedQuote='';selectedCost=null;out.replaceChildren();updateTotal();
-  if(form.elements.delivery.value!=='correios')return;
+  if(form.elements.delivery.value!=='transportadora')return;
   if(cep.length!==8){out.textContent='Informe um CEP com oito dígitos.';return}
   const b=q('quoteShipping');b.disabled=true;out.textContent='Consultando frete…';
   try{
    const response=await fetch('/api/shipping/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cep,items:bagPayload()})});
    const data=await response.json();if(!response.ok)throw Error(data.error||'Não foi possível cotar o frete');
-   if(form.elements.delivery.value!=='correios'||form.elements.cep.value.replace(/\D/g,'')!==cep)return;
-   out.replaceChildren();const options=(data.options||[]).filter(x=>String(x.carrier||'').toLowerCase().includes('correios'));
-   if(!options.length){out.textContent='Nenhum serviço dos Correios disponível para este CEP.';return}
+   if(form.elements.delivery.value!=='transportadora'||form.elements.cep.value.replace(/\D/g,'')!==cep)return;
+   out.replaceChildren();const options=(data.options||[]);
+   if(!options.length){out.textContent='Nenhuma transportadora habilitada para perfumes disponível para este CEP.';return}
    for(const o of options){
     const label=document.createElement('label'),radio=document.createElement('input');radio.type='radio';radio.name='liveShipping';radio.value=o.quoteId;
     radio.addEventListener('change',()=>{selectedQuote=o.quoteId;selectedCost=Number(o.cost);q('shippingSelection').textContent='Selecionado: '+o.carrier+' · '+o.service+' · '+currency(o.cost);updateTotal()});
@@ -89,7 +89,7 @@
  form.addEventListener('submit',async e=>{
   e.preventDefault();if(!checkoutEnabled||!form.reportValidity())return;
   const delivery=form.elements.delivery.value,payment=form.elements.payment.value,error=q('checkoutError');error.hidden=true;
-  if(delivery==='correios'&&!selectedQuote){error.textContent='Selecione um frete antes de pagar.';error.hidden=false;return}
+  if(delivery==='transportadora'&&!selectedQuote){error.textContent='Selecione um frete antes de pagar.';error.hidden=false;return}
   if(payment!=='cash'&&!onlinePayments){error.textContent='Pagamento online ainda não configurado. Contate a loja.';error.hidden=false;return}
   const b=q('submitOrder');b.disabled=true;b.textContent='Registrando pedido…';
   try{

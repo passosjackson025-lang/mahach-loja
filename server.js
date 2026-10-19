@@ -105,11 +105,22 @@ async function shippingQuote(payload){
  const cep=str(payload.cep,12).replace(/\D/g,'');if(cep.length!==8)throw Object.assign(new Error('CEP inválido'),{status:400});
  const items=await collectItems(payload.items);
  if(!items.length)throw Object.assign(new Error('Sacola vazia'),{status:400});
- const products=items.map(({p,qty})=>({id:p.id,width:p.width||15,height:p.height||15,length:p.length||15,weight:p.weight||1,insurance_value:p.price,quantity:qty}));
+ // Frete exige peso e dimensoes reais da embalagem; sem estimativas ficticias.
+ if(items.some(({p})=>![p.width,p.height,p.length,p.weight].every(n=>Number.isFinite(Number(n))&&Number(n)>0)))throw Object.assign(new Error('Para calcular frete, cadastre peso e dimensoes de todos os produtos da sacola.'),{status:422});
+ const products=items.map(({p,qty})=>({id:p.id,width:Number(p.width),height:Number(p.height),length:Number(p.length),weight:Number(p.weight),insurance_value:p.price,quantity:qty}));
  const api=conf('MELHOR_ENVIO_SANDBOX')==='true'?'https://sandbox.melhorenvio.com.br':'https://melhorenvio.com.br';
  const r=await fetch(api+'/api/v2/me/shipment/calculate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Accept':'application/json','User-Agent':'MAHACH ('+(conf('SHIPPING_CONTACT_EMAIL')||'suporte@mahach.com.br')+')'},body:JSON.stringify({from:{postal_code:origin},to:{postal_code:cep},products}),signal:AbortSignal.timeout(15000)});
- if(!r.ok)throw Object.assign(new Error('Não foi possível cotar o frete neste momento'),{status:502});
- const data=await r.json();return (Array.isArray(data)?data:[]).filter(x=>String(x.company?.name||'').toLowerCase().includes('correios')&&x.price&&!x.error).map(x=>({service:String(x.name||'Entrega'),carrier:String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'})).filter(x=>Number.isFinite(x.cost)&&x.cost>=0);
+ if(!r.ok){
+  // Nao gravar respostas de provedor nem tokens nos logs.
+  const reason=r.status===401||r.status===403?'Melhor Envio recusou o acesso: confira se o token pertence ao ambiente selecionado (sandbox ou producao).':r.status===422?'Melhor Envio recusou os dados do frete: confira CEP, peso e dimensoes.':'Melhor Envio indisponivel neste momento (HTTP '+r.status+').';
+  throw Object.assign(new Error(reason),{status:502});
+ }
+ const data=await r.json();
+ // Perfumes: nao oferecer Correios, LATAM, Azul ou Loggi; restricoes conforme tabela Melhor Envio.
+ const authorized=/jadlog|buslog|j\s*&\s*t|pegaki|ponto parceiro/i;
+ return (Array.isArray(data)?data:[]).filter(x=>authorized.test(String(x.company?.name||''))&&!x.error&&(x.custom_price||x.price))
+  .map(x=>({service:String(x.name||'Entrega'),carrier:String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
+  .filter(x=>Number.isFinite(x.cost)&&x.cost>=0&&Number.isFinite(x.days)&&x.days>=0);
 }
 async function collectItems(items){if(!Array.isArray(items)||items.length>30)throw Object.assign(new Error('Sacola inválida'),{status:400});const ids=new Set(),out=[];for(const it of items){const id=str(it.id,80),qty=Number(it.qty);if(!id||ids.has(id)||!Number.isInteger(qty)||qty<1||qty>20)throw Object.assign(new Error('Quantidade inválida'),{status:400});ids.add(id);const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(id));if(!p)throw Object.assign(new Error('Produto indisponível'),{status:400});if(p.stock!==null&&p.stock<qty)throw Object.assign(new Error('Quantidade indisponível: '+p.name),{status:400});out.push({p,qty})}return out}
 
@@ -241,16 +252,16 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   // Nunca permitir pagamento se a loja nao sabe quantas unidades tem.
   if(items.some(({p})=>p.stock===null||p.stock===undefined))return problem(res,400,'Informe o estoque dos produtos antes de receber pagamentos');
   const customer_name=str(data.name,120),phone=str(data.phone,20).replace(/\D/g,''),email=str(data.email,200).toLowerCase(),delivery=str(data.delivery,20),payment=str(data.payment,30),cep=str(data.cep,12).replace(/\D/g,''),address=str(data.address,320);
-  if(customer_name.length<3||phone.length<10||phone.length>13||!/^\S+@\S+\.\S+$/.test(email)||!['pickup','correios','uber','99'].includes(delivery)||!['cash','pix','card','assist'].includes(payment))return problem(res,400,'Confira nome, e-mail, entrega e pagamento');
+  if(customer_name.length<3||phone.length<10||phone.length>13||!/^\S+@\S+\.\S+$/.test(email)||!['pickup','correios','transportadora','uber','99'].includes(delivery)||!['cash','pix','card','assist'].includes(payment))return problem(res,400,'Confira nome, e-mail, entrega e pagamento');
   const assist=['uber','99'].includes(delivery);
   if(delivery!=='pickup'&&(cep.length!==8||address.length<8))return problem(res,400,'Informe endereço completo e CEP');
   if(payment==='cash'&&delivery!=='pickup'||payment==='assist')return problem(res,400,'Pagamento incompatível com a entrega');
   if(['pix','card'].includes(payment)&&!commerce.configured(conf))return problem(res,503,'Pagamento online indisponível. Configure Mercado Pago e uma URL HTTPS no painel.');
   let freight=delivery==='pickup'?0:null,shippingService=delivery==='pickup'?'Retirada na loja':assist?'Corrida a combinar separadamente (Uber/99)':'';
-  if(delivery==='correios'){
-   if(!conf('MELHOR_ENVIO_TOKEN')||!/^\d{8}$/.test(conf('ORIGIN_CEP')))return problem(res,503,'Cotação dos Correios indisponível: configure Melhor Envio e CEP de origem no painel.');
+  if(delivery==='correios'||delivery==='transportadora'){
+   if(!conf('MELHOR_ENVIO_TOKEN')||!/^\d{8}$/.test(conf('ORIGIN_CEP')))return problem(res,503,'Cotação indisponível: configure Melhor Envio e CEP de origem no painel.');
    const entry=liveQuotes.get(hash(str(data.quoteId,80)));
-   if(!entry||Date.now()-entry.created>600000||entry.fingerprint!==itemsFingerprint(items,cep)||!entry.carrier.toLowerCase().includes('correios'))return problem(res,400,'Selecione uma cotação válida dos Correios');
+   if(!entry||Date.now()-entry.created>600000||entry.fingerprint!==itemsFingerprint(items,cep)||!(/jadlog|buslog|j\s*&\s*t|pegaki|ponto parceiro/i).test(entry.carrier))return problem(res,400,'Selecione uma cotação válida de transportadora habilitada para perfumes');
    freight=entry.cost;shippingService=entry.carrier+' · '+entry.service;
   }
   const subtotal=Math.round(items.reduce((acc,x)=>acc+x.p.price*x.qty,0)*100)/100;
@@ -265,7 +276,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const marketingOptIn=data.marketingOptIn===true || data.marketingOptIn==='on';
   await db.transaction(async()=>{
    await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id,marketing_opt_in) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(id,hash(token),created,'pedido_criado',customer_name,phone,email,delivery==='pickup'?'':cep,delivery==='pickup'?'':address,delivery,payment,JSON.stringify(snapshot),subtotal,freight,assist?'Mercadoria paga online; corrida Uber/99 NÃO incluída no total. Negociar por WhatsApp após pagamento aprovado':delivery==='pickup'?'Retirada sem frete; '+(conf('SHOP_ADDRESS')||'endereço a informar'):'Correios · cotação selecionada',shippingService,mpPreferenceId,marketingOptIn);
+    .run(id,hash(token),created,'pedido_criado',customer_name,phone,email,delivery==='pickup'?'':cep,delivery==='pickup'?'':address,delivery,payment,JSON.stringify(snapshot),subtotal,freight,assist?'Mercadoria paga online; corrida Uber/99 NÃO incluída no total. Negociar por WhatsApp após pagamento aprovado':delivery==='pickup'?'Retirada sem frete; '+(conf('SHOP_ADDRESS')||'endereço a informar'):'Melhor Envio · cotação selecionada',shippingService,mpPreferenceId,marketingOptIn);
    // Uma compra sem marcar a opção NUNCA concede permissão para marketing.
    // Um opt-in registrado anteriormente não é apagado por uma compra posterior.
    await db.prepare(`INSERT INTO customers(email,name,phone,marketing_opt_in,marketing_consent_at,first_order_at,last_order_at,last_order_id)
@@ -276,7 +287,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
     last_order_at=NOW(),last_order_id=EXCLUDED.last_order_id,updated_at=NOW()`)
     .run(email,customer_name,phone,marketingOptIn,marketingOptIn,id);
   });
-  if(delivery==='correios')liveQuotes.delete(hash(str(data.quoteId,80)));
+  if(delivery==='correios'||delivery==='transportadora')liveQuotes.delete(hash(str(data.quoteId,80)));
   if(payment==='cash')await sendTransactional(id,'created');
   return json(res,201,{reference:id,token,mode:['pix','card'].includes(payment)?'online':'pickup-cash',checkoutUrl,whatsapp:'',notice:assist?'Pague os produtos pelo Mercado Pago. O custo da corrida NÃO está incluído; após pagamento aprovado, combine a entrega no WhatsApp.':payment==='cash'?'Pedido registrado. Pagamento em dinheiro na retirada.':'Pedido registrado; o pagamento será feito no ambiente seguro do Mercado Pago e só será confirmado após verificação.'});
  }
