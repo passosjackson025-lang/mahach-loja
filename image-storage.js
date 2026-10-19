@@ -50,7 +50,11 @@ async function savePhoto(bytes,root){
   /invalid api key|unknown api key|api key not found|invalid api_key/i.test(message)?'API_KEY_INVALIDA':
   /timestamp|time stamp/i.test(message)?'HORARIO_INVALIDO':
   'AUTORIZACAO_RECUSADA';
- console.error('[Cloudinary] HTTP '+r.status+' '+reason);
+
+ const allowed=new Set('account api authentication authorization blocked cloud credentials denied disabled expired forbidden invalid key missing not permission rejected required secret signature signing suspended timestamp unauthorized unknown unrecognized upload wrong found enabled'.split(' '));
+ const details=(message.toLowerCase().match(/[a-z]+/g)||[])
+  .filter(word=>allowed.has(word)).slice(0,20).join(' ')||'SEM_DETALHES';
+ console.error('[Cloudinary] HTTP '+r.status+' '+reason+' DETALHES='+details);
  throw httpError('O armazenamento recusou o upload (HTTP '+r.status+').',502);
 }
  const data=await r.json().catch(()=>({}));
