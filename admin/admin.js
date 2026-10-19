@@ -58,7 +58,7 @@ $('#blingPreviewButton')?.addEventListener('click',async()=>{try{const r=await a
 $('#syncButton')?.addEventListener('click',async e=>{e.target.disabled=true;$('#syncStatus').textContent='Sincronizando…';try{const r=await api('/api/admin/sync-vendizap','POST',{});$('#syncStatus').textContent=`${r.synced} produtos atualizados e ${r.images} fotos encontradas.`;await stats()}catch(x){$('#syncStatus').textContent=x.message}finally{e.target.disabled=false}});
 
 // Configurações persistentes: campos secretos só retornam indicadores, nunca o valor.
-const SECTIONS={'loja':'Loja e retirada','vendizap':'Vendizap — Catálogo','melhor-envio':'Melhor Envio — Frete','bling':'Bling — ERP (OAuth pendente)','mercado-pago':'Mercado Pago — Pagamentos (cobrança pendente)','email':'E-mails transacionais — Resend'};
+const SECTIONS={'loja':'Loja e retirada','vendizap':'Vendizap — Catálogo','melhor-envio':'Melhor Envio — Transportadoras','bling':'Bling — ERP (OAuth pendente)','mercado-pago':'Mercado Pago — Pagamentos (cobrança pendente)','email':'E-mails transacionais — Resend'};
 let settingsSnapshot=[];
 async function loadSettings(){
  const {fields}=await api('/api/admin/settings');settingsSnapshot=fields;

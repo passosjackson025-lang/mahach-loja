@@ -58,7 +58,7 @@
  function refreshDelivery(){
   const mode=form.elements.delivery.value,delivery=mode!=='pickup';
   q('deliveryAddress').hidden=!delivery;form.elements.cep.required=delivery;form.elements.address.required=delivery;
-  q('quoteShipping').hidden=mode!=='correios';
+  q('quoteShipping').hidden=mode!=='transportadora';
   const cash=form.querySelector('[name="payment"][value="cash"]');cash.disabled=delivery;
   if(cash.checked&&delivery)form.querySelector('[name="payment"][value="pix"]').checked=true;
   selectedQuote='';selectedCost=null;q('shippingResults').replaceChildren();q('shippingSelection').textContent='';
