@@ -118,7 +118,15 @@ async function shippingQuote(payload){
  const data=await r.json();
  // Perfumes: nao oferecer Correios, LATAM, Azul ou Loggi; restricoes conforme tabela Melhor Envio.
  const authorized=/jadlog|buslog|j\s*&\s*t|pegaki|ponto parceiro/i;
- return (Array.isArray(data)?data:[]).filter(x=>authorized.test(String(x.company?.name||''))&&!x.error&&(x.custom_price||x.price))
+ const allRates=Array.isArray(data)?data:[];
+ const validRates=allRates.filter(x=>x&&!x.error&&(x.custom_price||x.price));
+ const perfumeRates=validRates.filter(x=>authorized.test(String(x.company?.name||'')));
+ if(!perfumeRates.length){
+  // Sem CEP, destinatario, valores ou credenciais nos logs.
+  const names=[...new Set(validRates.map(x=>String(x.company?.name||'').replace(/[^a-zA-Z0-9 .&-]/g,'').slice(0,40)))].filter(Boolean).slice(0,12);
+  console.info('[Frete MAHACH] cotacoes_recebidas='+allRates.length+' validas='+validRates.length+' adequadas_para_perfume=0 transportadoras='+names.join('|').slice(0,280));
+ }
+ return perfumeRates
   .map(x=>({service:String(x.name||'Entrega'),carrier:String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
   .filter(x=>Number.isFinite(x.cost)&&x.cost>=0&&Number.isFinite(x.days)&&x.days>=0);
 }
@@ -219,6 +227,22 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
  const productId=route.match(/^\/api\/products\/([a-zA-Z0-9_-]{5,80})$/);
  if(productId&&method==='GET'){const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(productId[1]));return p?json(res,200,{product:productSummary(p)},{'Cache-Control':'public, max-age=20'}):problem(res,404,'Produto não encontrado')}
+ // Busca somente o CEP (nunca o nome, numero ou dados do cliente) no ViaCEP.
+ if(route==='/api/address/cep'&&method==='GET'){
+  if(!rate(req,'cep-lookup',30,600000))return problem(res,429,'Muitas consultas de CEP. Aguarde alguns minutos.');
+  const cep=String(u.searchParams.get('cep')||'').replace(/\D/g,'');
+  if(!/^\d{8}$/.test(cep))return problem(res,400,'Informe um CEP de oito digitos.');
+  let response;
+  try{response=await fetch('https://viacep.com.br/ws/'+cep+'/json/',{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(5500)});}
+  catch{return problem(res,503,'Consulta de CEP indisponivel. Preencha o endereco manualmente.');}
+  if(!response.ok)return problem(res,503,'Consulta de CEP indisponivel. Preencha o endereco manualmente.');
+  let data;
+  try{data=await response.json();}
+  catch{return problem(res,503,'Resposta de CEP invalida. Preencha o endereco manualmente.');}
+  if(data?.erro===true||!data||typeof data!=='object'||!String(data.localidade||'').trim()||!/^[A-Za-z]{2}$/.test(String(data.uf||'')))
+   return problem(res,404,'CEP nao encontrado. Confira e preencha o endereco manualmente.');
+  return json(res,200,{cep,street:str(data.logradouro,95),neighborhood:str(data.bairro,70),city:str(data.localidade,70),state:str(data.uf,2).toUpperCase()});
+ }
  if(route==='/api/shipping/quote'&&method==='POST'){
  if(!rate(req,'ship',20,600000))return problem(res,429,'Limite de cotações excedido');
  const p=await body(req);const list=await shippingQuote(p),items=await collectItems(p.items),cep=str(p.cep,12).replace(/\D/g,'');

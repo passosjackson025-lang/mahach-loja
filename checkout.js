@@ -13,7 +13,16 @@
    <label><input type="radio" name="delivery" value="uber"> Uber (corrida paga separadamente; valor a combinar)</label>
    <label><input type="radio" name="delivery" value="99"> 99Entrega (corrida paga separadamente; valor a combinar)</label>
   </div></fieldset>
-  <div id="deliveryAddress" hidden><div class="checkout-fields"><label>CEP de entrega<input name="cep" inputmode="numeric" autocomplete="postal-code" placeholder="00000-000" maxlength="9"></label><label>Endereço completo, número, bairro e cidade/UF<input name="address" autocomplete="street-address" maxlength="320" placeholder="Rua, número, bairro, cidade/UF"></label></div>
+  <div id="deliveryAddress" hidden><div class="checkout-fields">
+   <label>CEP de entrega<input name="cep" inputmode="numeric" autocomplete="postal-code" placeholder="00000-000" maxlength="9"></label>
+   <label>Rua ou avenida<input name="street" autocomplete="address-line1" maxlength="95" placeholder="Preenchida automaticamente pelo CEP"></label>
+   <label>Numero do imovel<input name="addressNumber" inputmode="text" maxlength="15" placeholder="Ex.: 123"></label>
+   <label>Complemento (opcional)<input name="complement" autocomplete="address-line2" maxlength="40" placeholder="Apto, bloco, sala..."></label>
+   <label>Bairro<input name="neighborhood" maxlength="70" placeholder="Preenchido automaticamente"></label>
+   <label>Cidade<input name="city" maxlength="70" placeholder="Preenchida automaticamente"></label>
+   <label>UF<input name="state" maxlength="2" placeholder="SP"></label>
+   <input type="hidden" name="address">
+  </div><p id="cepLookupStatus" class="shipping-choice" role="status" aria-live="polite"></p>
    <button class="quote-button" type="button" id="quoteShipping">Calcular frete</button><div id="shippingResults" aria-live="polite"></div><p class="shipping-choice" id="shippingSelection" role="status"></p></div>
   <fieldset><legend>Como deseja pagar?</legend><div class="checkout-options" id="paymentOptions">
    <label><input type="radio" name="payment" value="pix" checked> Pix pelo Mercado Pago</label>
@@ -41,7 +50,7 @@
  const currency=n=>Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
  const bagPayload=()=>items.map(x=>({id:x.id,qty:x.qty}));
  window.openCheckout=function(bag,map){
-  selectedQuote='';selectedCost=null;form.reset();
+  selectedQuote='';selectedCost=null;form.reset();clearTimeout(cepTimer);++cepRequest;q('cepLookupStatus').textContent='';
   items=Object.entries(bag).map(([id,qty])=>({id,qty,p:map.get(id)})).filter(x=>x.p);
   q('orderSuccess').hidden=true;q('checkoutError').hidden=true;q('shippingResults').replaceChildren();q('shippingSelection').textContent='';
   refreshDelivery();d.showModal();syncAvailability();document.body.classList.add('modal-open');
@@ -57,7 +66,7 @@
  }
  function refreshDelivery(){
   const mode=form.elements.delivery.value,delivery=mode!=='pickup';
-  q('deliveryAddress').hidden=!delivery;form.elements.cep.required=delivery;form.elements.address.required=delivery;
+  q('deliveryAddress').hidden=!delivery;form.elements.cep.required=delivery;for(const name of ['street','addressNumber','neighborhood','city','state'])form.elements[name].required=delivery;
   q('quoteShipping').hidden=mode!=='transportadora';
   const cash=form.querySelector('[name="payment"][value="cash"]');cash.disabled=delivery;
   if(cash.checked&&delivery)form.querySelector('[name="payment"][value="pix"]').checked=true;
@@ -67,7 +76,40 @@
  }
  function updateSubmitLabel(){const cash=form.elements.payment.value==='cash';q('submitOrder').textContent=cash?'Registrar pedido para retirada':'Continuar para o Mercado Pago ↗'}
  form.addEventListener('change',e=>{if(e.target.name==='delivery')refreshDelivery();if(e.target.name==='payment')updateSubmitLabel()});
- form.elements.cep.addEventListener('input',()=>{selectedQuote='';selectedCost=null;q('shippingResults').replaceChildren();q('shippingSelection').textContent='CEP alterado. Consulte novamente o frete.';updateTotal()});
+ let cepTimer=null,cepRequest=0;
+ const addressFields=['street','addressNumber','complement','neighborhood','city','state'];
+ function composeAddress(){
+  const value=n=>String(form.elements[n].value||'').trim();
+  const line=value('street')+', '+value('addressNumber')+(value('complement')?', '+value('complement'):'');
+  return line+' - '+value('neighborhood')+' - '+value('city')+'/'+value('state').toUpperCase();
+ }
+ for(const field of addressFields){form.elements[field].addEventListener('input',()=>{form.elements.address.value=composeAddress()});}
+ form.elements.cep.addEventListener('input',()=>{
+  const cep=form.elements.cep.value.replace(/\D/g,'').slice(0,8);
+  form.elements.cep.value=cep.length>5?cep.slice(0,5)+'-'+cep.slice(5):cep;
+  ++cepRequest;clearTimeout(cepTimer);
+  for(const field of addressFields)form.elements[field].value='';
+  form.elements.address.value='';
+  selectedQuote='';selectedCost=null;q('shippingResults').replaceChildren();q('shippingSelection').textContent='CEP alterado. Consulte novamente o frete.';updateTotal();
+  const status=q('cepLookupStatus');
+  if(cep.length!==8){status.textContent=cep?'Digite os oito numeros do CEP.':'';return;}
+  status.textContent='Buscando rua, bairro e cidade pelo CEP...';
+  const version=cepRequest;
+  cepTimer=setTimeout(async()=>{
+   try{
+    const res=await fetch('/api/address/cep?cep='+encodeURIComponent(cep),{cache:'no-store'});
+    const info=await res.json();
+    if(version!==cepRequest||form.elements.cep.value.replace(/\D/g,'')!==cep)return;
+    if(!res.ok)throw Error(info.error||'CEP nao localizado.');
+    for(const [field,key] of [['street','street'],['neighborhood','neighborhood'],['city','city'],['state','state']]){
+     if(!String(form.elements[field].value||'').trim())form.elements[field].value=info[key]||'';
+    }
+    form.elements.address.value=composeAddress();
+    status.textContent=info.street?'Endereco encontrado! Informe somente o numero e, se necessario, o complemento.':'Cidade e bairro consultados. Este CEP nao identifica uma rua; preencha a rua e o numero.';
+    if(info.street)form.elements.addressNumber.focus();
+   }catch(err){if(version===cepRequest)status.textContent=err.message+' Voce pode preencher o endereco manualmente.';}
+  },450);
+ });
  q('quoteShipping').addEventListener('click',async()=>{
   const cep=form.elements.cep.value.replace(/\D/g,''),out=q('shippingResults');selectedQuote='';selectedCost=null;out.replaceChildren();updateTotal();
   if(form.elements.delivery.value!=='transportadora')return;
@@ -93,7 +135,8 @@
   if(payment!=='cash'&&!onlinePayments){error.textContent='Pagamento online ainda não configurado. Contate a loja.';error.hidden=false;return}
   const b=q('submitOrder');b.disabled=true;b.textContent='Registrando pedido…';
   try{
-   const data=Object.fromEntries(new FormData(form));data.marketingOptIn=form.elements.marketingOptIn.checked;
+   const data=Object.fromEntries(new FormData(form));data.address=form.elements.delivery.value==='pickup'?'':composeAddress();data.marketingOptIn=form.elements.marketingOptIn.checked;
+   if(form.elements.delivery.value!=='pickup'&&data.address.length>320)throw Error('Endereco muito longo. Reduza o complemento antes de continuar.');
    const response=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...data,quoteId:selectedQuote,items:bagPayload()})});
    const result=await response.json();if(!response.ok)throw Error(result.error||'Não foi possível registrar o pedido');
    // A referência e o token permanecem no navegador; não entram no URL enviado ao Mercado Pago.
