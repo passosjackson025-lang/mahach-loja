@@ -48,7 +48,33 @@ $('#productForm')?.addEventListener('submit',async e=>{
   await api('/api/admin/products'+(id?'/'+id:''),id?'PUT':'POST',d);$('#photoStatus').textContent='Imagem e dados gravados no banco.';$('#editDialog').close();say('Produto salvo com sucesso.');await listProducts();await stats();
  }catch(x){say(x.message);$('#photoStatus').textContent=x.message}finally{btn.disabled=false}
 });
-async function listOrders(){const {orders}=await api('/api/admin/orders');$('#ordersList').replaceChildren(...orders.map(o=>{const r=elem('article',undefined,'admin-record'),info=elem('div',undefined,'info'),fields=elem('div',undefined,'order-details');info.append(elem('strong',o.id+' · '+o.customer_name),elem('small',new Date(o.created).toLocaleString('pt-BR')+' · '+o.phone),elem('small',o.items.map(x=>x.qty+'x '+x.name).join(', ')),elem('small',`R$ ${o.subtotal.toFixed(2)} · ${o.delivery} · ${o.payment}`),elem('small',o.address||'Retirada na loja'));const sel=elem('select');for(const status of ['pedido_criado','aguardando_confirmacao','pagamento_aprovado','em_preparacao','enviado','pronto_retirada','concluido','cancelado']){const opt=elem('option',status.replaceAll('_',' '));opt.value=status;opt.selected=o.status===status;sel.append(opt)}const code=elem('input');code.value=o.tracking_code||'';code.placeholder='Código de rastreio';const url=elem('input');url.value=o.tracking_url||'';url.placeholder='Link HTTPS de rastreio';const b=elem('button','Salvar status');b.onclick=async()=>{try{await api('/api/admin/orders/'+o.id,'PUT',{status:sel.value,tracking_code:code.value,tracking_url:url.value});say('Status atualizado')}catch(x){say(x.message)}};fields.append(sel,code,url,b);r.append(info,fields);return r}));if(!orders.length)$('#ordersList').textContent='Nenhuma solicitação por enquanto.'}
+async function listOrders(){
+ const {orders}=await api('/api/admin/orders');
+ $('#ordersList').replaceChildren(...orders.map(o=>{
+  const r=elem('article',undefined,'admin-record'),info=elem('div',undefined,'info'),fields=elem('div',undefined,'order-details');
+  info.append(elem('strong',o.id+' · '+o.customer_name),elem('small',new Date(o.created).toLocaleString('pt-BR')+' · '+o.phone),elem('small',o.items.map(x=>x.qty+'x '+x.name).join(', ')),elem('small','R$ '+Number(o.subtotal).toFixed(2)+' · '+o.delivery+' · '+o.payment),elem('small',o.address||'Retirada na loja'));
+  info.append(elem('small','Pagamento: '+(o.payment_status||'pendente')));
+  const sel=elem('select');
+  for(const status of ['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','enviado','pronto_retirada','concluido','cancelado']){
+   const opt=elem('option',status.replaceAll('_',' '));opt.value=status;opt.selected=o.status===status;sel.append(opt);
+  }
+  const code=elem('input');code.value=o.tracking_code||'';code.placeholder='Código de rastreio';
+  const url=elem('input');url.value=o.tracking_url||'';url.placeholder='Link HTTPS de rastreio';
+  const b=elem('button','Salvar status');b.type='button';
+  const result=elem('small','');result.setAttribute('role','status');result.setAttribute('aria-live','polite');
+  b.onclick=async()=>{
+   b.disabled=true;result.textContent='Salvando…';
+   try{
+    if(sel.value==='pagamento_aprovado'&&['pix','card'].includes(o.payment)&&o.payment_status!=='aprovado')throw Error('O pagamento só pode ser aprovado pelo Mercado Pago.');
+    await api('/api/admin/orders/'+o.id,'PUT',{status:sel.value,tracking_code:code.value,tracking_url:url.value});
+    result.textContent='Salvo com sucesso.';say('Pedido '+o.id+' atualizado.');
+    setTimeout(()=>listOrders().catch(e=>say(e.message)),800);
+   }catch(e){result.textContent='Não foi salvo: '+e.message;say('Pedido '+o.id+': '+e.message)}finally{b.disabled=false}
+  };
+  fields.append(sel,code,url,b,result);r.append(info,fields);return r;
+ }));
+ if(!orders.length)$('#ordersList').textContent='Nenhum pedido por enquanto.';
+}
 $('#csvImportForm')?.addEventListener('submit',async e=>{e.preventDefault();const file=$('#catalogFile').files[0];if(!file)return;
  const out=$('#csvImportResult');if(file.size>8*1024*1024){out.textContent='Arquivo maior que 8MB';return}
  const btn=e.target.querySelector('button');btn.disabled=true;out.textContent='Importando...';
