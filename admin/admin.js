@@ -93,7 +93,7 @@ async function loadSettings(){
   const box=elem('fieldset',undefined,'settings-group'),legend=elem('legend',label),grid=elem('div',undefined,'settings-grid');box.append(legend);
   for(const field of fields.filter(x=>x.section===section)){
    const wrap=elem('label',undefined,'setting-field'),title=elem('span',field.label),input=elem('input');
-   input.dataset.configKey=field.key;input.maxLength=1500;
+   input.dataset.configKey=field.key;input.maxLength=field.key==='MELHOR_ENVIO_TOKEN'?8192:1500;
    if(field.kind==='secret'){input.type='password';input.autocomplete='new-password';input.placeholder=field.configured?'Credencial salva · deixe vazio para manter':'Cole sua credencial';}
    else{input.type='text';input.value=field.value||'';if(field.kind==='bool')input.placeholder='true / false';if(field.kind==='cep')input.inputMode='numeric'}
    wrap.append(title,input);

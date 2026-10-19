@@ -9,7 +9,7 @@ const FIELDS=Object.freeze({
  ORIGIN_CEP:{label:'CEP da loja (origem do frete)',kind:'cep',section:'melhor-envio'},
  SHIPPING_CONTACT_EMAIL:{label:'E-mail operacional do frete',kind:'email',section:'melhor-envio'},
  MELHOR_ENVIO_SANDBOX:{label:'Ambiente de testes (true/false)',kind:'bool',section:'melhor-envio'},
- MELHOR_ENVIO_TOKEN:{label:'Token Melhor Envio',kind:'secret',section:'melhor-envio'},
+ MELHOR_ENVIO_TOKEN:{label:'Token Melhor Envio',kind:'secret',section:'melhor-envio',max:8192},
  VENDIZAP_ID:{label:'ID Vendizap',kind:'text',section:'vendizap'},
  VENDIZAP_SECRET:{label:'Secret Vendizap',kind:'secret',section:'vendizap'},
  BLING_CLIENT_ID:{label:'Client ID Bling',kind:'text',section:'bling'},
