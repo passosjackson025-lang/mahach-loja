@@ -117,7 +117,7 @@ async function shippingQuote(payload){
  }
  const data=await r.json();
  // Perfumes: nao oferecer Correios, LATAM, Azul ou Loggi; restricoes conforme tabela Melhor Envio.
- const authorized=/jadlog|buslog|j\s*&\s*t|pegaki|ponto parceiro/i;
+ const authorized=/jadlog|buslog|j\s*&\s*t|\bjet\b|pegaki|ponto parceiro/i;
  const allRates=Array.isArray(data)?data:[];
  const validRates=allRates.filter(x=>x&&!x.error&&(x.custom_price||x.price));
  const perfumeRates=validRates.filter(x=>authorized.test(String(x.company?.name||'')));
@@ -127,7 +127,7 @@ async function shippingQuote(payload){
   console.info('[Frete MAHACH] cotacoes_recebidas='+allRates.length+' validas='+validRates.length+' adequadas_para_perfume=0 transportadoras='+names.join('|').slice(0,280));
  }
  return perfumeRates
-  .map(x=>({service:String(x.name||'Entrega'),carrier:String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
+  .map(x=>({service:String(x.name||'Entrega'),carrier:/^jet$/i.test(String(x.company?.name||''))?'J&T Express':String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
   .filter(x=>Number.isFinite(x.cost)&&x.cost>=0&&Number.isFinite(x.days)&&x.days>=0);
 }
 async function collectItems(items){if(!Array.isArray(items)||items.length>30)throw Object.assign(new Error('Sacola inválida'),{status:400});const ids=new Set(),out=[];for(const it of items){const id=str(it.id,80),qty=Number(it.qty);if(!id||ids.has(id)||!Number.isInteger(qty)||qty<1||qty>20)throw Object.assign(new Error('Quantidade inválida'),{status:400});ids.add(id);const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(id));if(!p)throw Object.assign(new Error('Produto indisponível'),{status:400});if(p.stock!==null&&p.stock<qty)throw Object.assign(new Error('Quantidade indisponível: '+p.name),{status:400});out.push({p,qty})}return out}
@@ -285,7 +285,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   if(delivery==='correios'||delivery==='transportadora'){
    if(!conf('MELHOR_ENVIO_TOKEN')||!/^\d{8}$/.test(conf('ORIGIN_CEP')))return problem(res,503,'Cotação indisponível: configure Melhor Envio e CEP de origem no painel.');
    const entry=liveQuotes.get(hash(str(data.quoteId,80)));
-   if(!entry||Date.now()-entry.created>600000||entry.fingerprint!==itemsFingerprint(items,cep)||!(/jadlog|buslog|j\s*&\s*t|pegaki|ponto parceiro/i).test(entry.carrier))return problem(res,400,'Selecione uma cotação válida de transportadora habilitada para perfumes');
+   if(!entry||Date.now()-entry.created>600000||entry.fingerprint!==itemsFingerprint(items,cep)||!(/jadlog|buslog|j\s*&\s*t|\bjet\b|pegaki|ponto parceiro/i).test(entry.carrier))return problem(res,400,'Selecione uma cotação válida de transportadora habilitada para perfumes');
    freight=entry.cost;shippingService=entry.carrier+' · '+entry.service;
   }
   const subtotal=Math.round(items.reduce((acc,x)=>acc+x.p.price*x.qty,0)*100)/100;
