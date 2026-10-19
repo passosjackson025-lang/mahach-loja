@@ -64,7 +64,7 @@ async function staticFile(req,res,url){
  if(pathname.endsWith('/'))pathname+='index.html';
  if(pathname==='/admin/painel.html'&&!await session(req)){res.writeHead(302,{Location:'/admin'});return res.end()}
  // Bloquear arquivos de configuração, fontes de dados e banco de dados.
- if(!/^\/(?:index\.html|app\.js|data\.js|scene\.js|polish\.js|styles\.css|catalogo\.js|checkout\.js|finalizado\.html|finalizado\.js|acompanhar\.html|privacidade\.html|tracking\.js|admin\/(?:login\.html|painel\.html|admin\.js|admin\.css|admin-pg-status\.css)|produtos\/(?:index\.html|perfumaria-arabe\/index\.html|corpo-e-cuidado\/index\.html|beleza-essencial\/index\.html)|assets\/[\w./-]+)$/.test(pathname)||pathname.includes('..'))return problem(res,404,'Não encontrado');
+ if(!/^\/(?:index\.html|app\.js|data\.js|scene\.js|polish\.js|styles\.css|pix-checkout\.css|catalogo\.js|checkout\.js|finalizado\.html|finalizado\.js|acompanhar\.html|privacidade\.html|tracking\.js|admin\/(?:login\.html|painel\.html|admin\.js|admin\.css|admin-pg-status\.css)|produtos\/(?:index\.html|perfumaria-arabe\/index\.html|corpo-e-cuidado\/index\.html|beleza-essencial\/index\.html)|assets\/[\w./-]+)$/.test(pathname)||pathname.includes('..'))return problem(res,404,'Não encontrado');
  const file=path.join(ROOT,pathname);if(!file.startsWith(ROOT+path.sep))return problem(res,404,'Não encontrado');
  let st;try{const real=fs.realpathSync(file);if(!real.startsWith(ROOT+path.sep))throw 0;st=fs.statSync(real);if(!st.isFile())throw 0}catch{return problem(res,404,'Não encontrado')}
  const ext=path.extname(file);if(!MIME[ext])return problem(res,404,'Não encontrado');
@@ -171,6 +171,8 @@ async function processVerifiedPayment(paymentId){
  if(!o||!['pix','card'].includes(o.payment))return {ignored:true};
  const expected=commerce.cents(Number(o.subtotal)+Number(o.shipping_cost||0));
  if(pay.currency_id!=='BRL'||commerce.cents(pay.transaction_amount)!==expected)return {ignored:true,reason:'Valor divergente'};
+ if(o.payment==='pix'&&pay.payment_method_id!=='pix')return {ignored:true,reason:'Metodo divergente'};
+ if(o.payment==='pix'&&o.mp_payment_id&&o.mp_payment_id!==String(pay.id))return {ignored:true,reason:'Pagamento divergente'};
  if(pay.status!=='approved')return {approved:false};
  const applied=await db.transaction(async()=>{
   const locked=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(id);
@@ -260,13 +262,37 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const id=commerce.verifyMPWebhook(conf,req,u);if(!id)return problem(res,401,'Assinatura inválida');
   await body(req);const result=await processVerifiedPayment(id);return json(res,200,{received:true,...result});
  }
- if(route==='/api/payments/status'&&method==='GET'){
-  const reference=str(u.searchParams.get('reference'),30),token=str(u.searchParams.get('token'),100);
+ if(route==='/api/payments/status'&&(method==='GET'||method==='POST')){
+  if(!rate(req,'payment-status',25,60000))return problem(res,429,'Muitas consultas de pagamento');
+  if(method==='POST'&&!checkOrigin(req))return problem(res,403,'Origem nao autorizada');
+  const data=method==='POST'?await body(req):{reference:u.searchParams.get('reference'),token:u.searchParams.get('token')};
+  const reference=str(data.reference,30),token=str(data.token,100);
   const o=(await db.prepare('SELECT id,payment_status,delivery,status,customer_name,address,cep,subtotal,items_json FROM orders WHERE id=? AND public_token_hash=?').get(reference,hash(token)));
-  if(!o)return problem(res,404,'Pedido não encontrado');
+  if(!o)return problem(res,404,'Pedido nao encontrado');
   const quick=['uber','99'].includes(o.delivery);
   const whatsapp=quick&&o.payment_status==='aprovado'?quickDeliveryWhatsapp(o):'';
   return json(res,200,{reference:o.id,paymentStatus:o.payment_status,delivery:o.delivery,status:o.status,whatsapp});
+ }
+ // Uma repeticao nao cria outro pagamento Pix: a chave de idempotencia pertence ao pedido.
+ if(route==='/api/payments/pix/retry'&&method==='POST'){
+  if(!await checkoutAllowed(req))return problem(res,503,'Checkout indisponivel para visitantes');
+  if(!checkOrigin(req)||!rate(req,'pix-retry',5,900000))return problem(res,403,'Nova tentativa nao autorizada');
+  const data=await body(req),reference=str(data.reference,30),token=str(data.token,100);
+  const o=await db.prepare('SELECT * FROM orders WHERE id=? AND public_token_hash=?').get(reference,hash(token));
+  if(!o||o.payment!=='pix')return problem(res,404,'Pedido Pix nao encontrado');
+  if(o.payment_status==='aprovado')return json(res,200,{paid:true});
+  let details;
+  if(/^\d+$/.test(String(o.mp_payment_id||''))){
+   const payment=await commerce.getVerifiedPayment(conf,o.mp_payment_id);
+   if(payment.external_reference!==o.id||payment.payment_method_id!=='pix')return problem(res,409,'Pagamento nao corresponde ao pedido');
+   details=commerce.pixDetails(payment);
+  }else{
+   if(!commerce.validCPF(data.pixCpf))return problem(res,400,'Confira o CPF para gerar o Pix');
+   details=await commerce.createPixPayment(conf,o,data.pixCpf);
+   await db.prepare("UPDATE orders SET mp_payment_id=? WHERE id=? AND (mp_payment_id='' OR mp_payment_id IS NULL)").run(details.paymentId,o.id);
+  }
+  if(!details.qrCode||!details.qrCodeBase64)return problem(res,502,'Pix gerado, mas o QR Code ainda nao esta disponivel. Consulte novamente.');
+  return json(res,200,{paid:false,pix:details});
  }
  if(route==='/api/orders'&&method==='POST'){
   if(!await checkoutAllowed(req))return problem(res,503,'Checkout indisponivel para visitantes durante os testes');
@@ -278,6 +304,8 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const customer_name=str(data.name,120),phone=str(data.phone,20).replace(/\D/g,''),email=str(data.email,200).toLowerCase(),delivery=str(data.delivery,20),payment=str(data.payment,30),cep=str(data.cep,12).replace(/\D/g,''),address=str(data.address,320);
   if(customer_name.length<3||phone.length<10||phone.length>13||!/^\S+@\S+\.\S+$/.test(email)||!['pickup','correios','transportadora','uber','99'].includes(delivery)||!['cash','pix','card','assist'].includes(payment))return problem(res,400,'Confira nome, e-mail, entrega e pagamento');
   const assist=['uber','99'].includes(delivery);
+  const pixCpf=payment==='pix'?str(data.pixCpf,20).replace(/\D/g,''):'';
+  if(payment==='pix'&&!commerce.validCPF(pixCpf))return problem(res,400,'Informe um CPF valido para gerar o Pix');
   if(delivery!=='pickup'&&(cep.length!==8||address.length<8))return problem(res,400,'Informe endereço completo e CEP');
   if(payment==='cash'&&delivery!=='pickup'||payment==='assist')return problem(res,400,'Pagamento incompatível com a entrega');
   if(['pix','card'].includes(payment)&&!commerce.configured(conf))return problem(res,503,'Pagamento online indisponível. Configure Mercado Pago e uma URL HTTPS no painel.');
@@ -292,11 +320,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const id='MH-'+crypto.randomBytes(5).toString('hex').toUpperCase(),token=random(),created=new Date().toISOString();
   const snapshot=items.map(({p,qty})=>({id:p.id,name:p.name,qty,unit_price:p.price}));
   const order={id,customer_name,customer_email:email,subtotal,shipping_cost:freight,payment};
-  let checkoutUrl='',mpPreferenceId='';
-  if(['pix','card'].includes(payment)){
-   const mp=await commerce.createPreference(conf,order,snapshot,token);
-   checkoutUrl=mp.checkoutUrl;mpPreferenceId=mp.preferenceId;
-  }
+  let checkoutUrl='',mpPreferenceId='',pix=null;
   const marketingOptIn=data.marketingOptIn===true || data.marketingOptIn==='on';
   await db.transaction(async()=>{
    await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id,marketing_opt_in) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -312,8 +336,27 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
     .run(email,customer_name,phone,marketingOptIn,marketingOptIn,id);
   });
   if(delivery==='correios'||delivery==='transportadora')liveQuotes.delete(hash(str(data.quoteId,80)));
+  // O pedido existe antes de chamar o provedor; o webhook nunca chega sem pedido associado.
+  if(payment==='card'){
+   try{
+    const mp=await commerce.createPreference(conf,order,snapshot,token);
+    checkoutUrl=mp.checkoutUrl;mpPreferenceId=mp.preferenceId;
+    await db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(mpPreferenceId,id);
+   }catch(e){return json(res,502,{error:'Pedido registrado, mas o checkout de cartao nao foi gerado. Anote a referencia e procure a loja.',reference:id});}
+  }
+  if(payment==='pix'){
+   try{
+    pix=await commerce.createPixPayment(conf,order,pixCpf);
+    await db.prepare("UPDATE orders SET mp_payment_id=? WHERE id=? AND (mp_payment_id IS NULL OR mp_payment_id='')").run(pix.paymentId,id);
+   }catch(e){
+    // Entrega o token SOMENTE ao comprador para recuperar o mesmo Pix; nunca reenvie CPF.
+    return json(res,201,{reference:id,token,mode:'pix-retry',notice:'Pedido registrado, mas o Pix ainda nao foi exibido. Tente gerar o mesmo Pix novamente.'});
+   }
+   if(!pix.qrCode||!pix.qrCodeBase64)return json(res,201,{reference:id,token,mode:'pix-retry',notice:'Pedido registrado. Aguarde e tente carregar novamente o QR Code.'});
+  }
   if(payment==='cash')await sendTransactional(id,'created');
-  return json(res,201,{reference:id,token,mode:['pix','card'].includes(payment)?'online':'pickup-cash',checkoutUrl,whatsapp:'',notice:assist?'Pague os produtos pelo Mercado Pago. O custo da corrida NÃO está incluído; após pagamento aprovado, combine a entrega no WhatsApp.':payment==='cash'?'Pedido registrado. Pagamento em dinheiro na retirada.':'Pedido registrado; o pagamento será feito no ambiente seguro do Mercado Pago e só será confirmado após verificação.'});
+  return json(res,201,{reference:id,token,mode:payment==='pix'?'pix':payment==='card'?'online':'pickup-cash',pix,checkoutUrl,
+   notice:assist?'Custo da corrida Uber/99 nao incluido; combine apos o pagamento aprovado.':payment==='cash'?'Pedido registrado. Pague na loja quando retirar.':payment==='pix'?'Pague pelo QR Code ou Pix Copia e Cola. A confirmacao sera automatica.':'Pagamento por cartao no ambiente seguro do Mercado Pago.'});
  }
  if(route==='/api/orders/status'&&method==='GET'){
  if(!rate(req,'track',35,60000))return problem(res,429,'Muitas consultas. Aguarde um minuto');

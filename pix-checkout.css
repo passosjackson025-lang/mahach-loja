@@ -1,0 +1,12 @@
+/* MAHACH checkout: painel Pix responsivo, sem bibliotecas externas. */
+.checkout-pix-cpf{margin:1rem 0}
+.checkout-pix-cpf label{display:block}
+.checkout-pix-cpf input{display:block;width:100%;max-width:100%;box-sizing:border-box}
+.checkout-pix-cpf small{display:block;margin:.35rem 0 0;opacity:.82;line-height:1.45}
+.mahach-pix{margin:1rem 0;padding:1rem;border:1px solid #d7cabb;border-radius:12px;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}
+.mahach-pix img{display:block;width:230px;max-width:100%;height:auto;aspect-ratio:1;object-fit:contain;margin:1rem auto;background:#fff}
+.mahach-pix label{display:block;line-height:1.5}
+.mahach-pix textarea{width:100%;max-width:100%;box-sizing:border-box;resize:vertical;overflow-wrap:anywhere;min-height:5rem;padding:.65rem}
+.mahach-pix button{max-width:100%;white-space:normal;margin:.5rem .5rem .5rem 0}
+.mahach-pix #pixStatus{line-height:1.5}
+@media (max-width:540px){.mahach-pix{padding:.75rem}.mahach-pix button{display:block;width:100%;margin:.4rem 0}}

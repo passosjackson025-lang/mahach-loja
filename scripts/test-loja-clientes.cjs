@@ -27,6 +27,8 @@ class Pool{
    customer={email,name,phone,marketing_opt_in:!!optedIn,marketing_consent_at:optedIn?new Date().toISOString():null,last_order_id};return response([],1)
   }
   if(has('from mahach_stage."orders"')&&has('where id='))return response(order&&order.id===args[0]?[{...order}]:[]);
+  if(has('update mahach_stage."orders" set mp_payment_id=')){if(order?.id===args[1])order.mp_payment_id=args[0];return response([],1)}
+  if(has('update mahach_stage."orders" set mp_preference_id=')){if(order?.id===args[1])order.mp_preference_id=args[0];return response([],1)}
   if(has('update mahach_stage."orders" set payment_status=')){Object.assign(order,{payment_status:args[0],status:args[1],mp_payment_id:args[2]});approved++;return response([],1)}
   if(has('from mahach_stage."admins"'))return response(args[0]==='admin@exemplo.test'?[{email:'admin@exemplo.test',salt,hash:adminHash}]:[]);
   if(has('delete from mahach_stage."sessions"'))return response();
@@ -43,13 +45,14 @@ Module._load=function(id,parent,isMain){if(id==='pg')return {Pool,types:{setType
 Object.assign(process.env,{DATABASE_URL:'postgresql://test:abc@localhost/mock',MAHACH_SETTINGS_KEY:'00'.repeat(32),MAHACH_ENABLE_CHECKOUT:'true',MAHACH_ENABLE_ADMIN_WRITES:'true',MERCADO_PAGO_ACCESS_TOKEN:'credencial-ficticia-de-teste',MERCADO_PAGO_WEBHOOK_SECRET:'secret-de-teste',PUBLIC_SITE_URL:'https://ma-hach.invalid'});
 const commerce=require('../commerce-flows');
 commerce.createPreference=async(conf,o,items)=>({preferenceId:'TEST-PREF',checkoutUrl:'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=TEST-PREF'});
-commerce.getVerifiedPayment=async()=>({external_reference:order?.id,currency_id:'BRL',transaction_amount:95,status:'approved',id:123456789});
+commerce.createPixPayment=async(conf,o,cpf)=>{assert.ok(commerce.validCPF(cpf));return {paymentId:'123456789',qrCode:'PIX-TESTE-NAO-PAGAVEL',qrCodeBase64:'iVBORw0KGgo=',expiresAt:''}};
+commerce.getVerifiedPayment=async()=>({external_reference:order?.id,currency_id:'BRL',transaction_amount:95,status:'approved',id:123456789,payment_method_id:'pix'});
 const {server,ready,db}=require('../server');
 async function main(){await ready;await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
  try{
   let r=await fetch(base+'/api/admin/customers');assert.equal(r.status,401,'Clientes devem ser privados');
-  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'pix',marketingOptIn:true,items:[{id:'perfume-123',qty:1}]})});
-  assert.equal(r.status,201);const out=await r.json();assert.equal(out.mode,'online');assert.ok(out.checkoutUrl.startsWith('https://www.mercadopago.com.br/'));
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'pix',pixCpf:'52998224725',marketingOptIn:true,items:[{id:'perfume-123',qty:1}]})});
+  assert.equal(r.status,201);const out=await r.json();assert.equal(out.mode,'pix');assert.equal(out.pix.qrCode,'PIX-TESTE-NAO-PAGAVEL');assert.equal(order.mp_payment_id,'123456789');
   assert.ok(customer.marketing_opt_in);assert.equal(customer.name,'Pessoa Teste');assert.equal(order.marketing_opt_in,true);
   assert.equal(order.customer_email,'cliente@exemplo.test');assert.equal(stock,3);
   const dataId='123456789',requestId='fake-request-id',ts=Math.floor(Date.now()/1000).toString();
@@ -58,6 +61,12 @@ async function main(){await ready;await new Promise(r=>server.listen(0,'127.0.0.
   const webhook=()=>fetch(base+'/api/payments/mercadopago/webhook?data.id='+dataId,{method:'POST',headers:{'Content-Type':'application/json','x-signature':`ts=${ts},v1=${sig}`,'x-request-id':requestId},body:'{}'});
   r=await webhook();assert.equal(r.status,200);assert.equal(stock,2,'Estoque baixado uma única vez');assert.equal(order.payment_status,'aprovado');
   r=await webhook();assert.equal(r.status,200);assert.equal(stock,2,'Webhook repetido não deve debitar o estoque');assert.equal(approved,1);
+  r=await fetch(base+'/api/payments/status',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({reference:out.reference,token:out.token})});
+  assert.equal((await r.json()).paymentStatus,'aprovado');
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'card',items:[{id:'perfume-123',qty:1}]})});
+  assert.equal(r.status,201);const card=await r.json();assert.equal(card.mode,'online');assert.ok(card.checkoutUrl.startsWith('https://www.mercadopago.com.br/'));
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'cash',items:[{id:'perfume-123',qty:1}]})});
+  assert.equal(r.status,201);assert.equal((await r.json()).mode,'pickup-cash');assert.equal(order.payment_status,'pendente');
   r=await fetch(base+'/api/admin/login',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({email:'admin@exemplo.test',password:adminPassword})});
   assert.equal(r.status,200);const cookie=r.headers.get('set-cookie').split(';')[0],info=await r.json();
   r=await fetch(base+'/api/admin/customers',{headers:{Cookie:cookie}});assert.equal(r.status,200);const list=await r.json();assert.equal(list.customers.length,1);
