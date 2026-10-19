@@ -11,7 +11,7 @@ if(!databaseUrl) {
 }
 const pool=new Pool({connectionString:databaseUrl,ssl:{rejectUnauthorized:true},max:5,
  connectionTimeoutMillis:12000,idleTimeoutMillis:30000});
-const TABLES='admins|categories|products|orders|site_settings|sessions';
+const TABLES='admins|categories|products|orders|site_settings|sessions|customers';
 const objRe=new RegExp('\\b(FROM|JOIN|INTO|UPDATE|TABLE|REFERENCES)\\s+(?!mahach_stage\\.)(?:"?)('+TABLES+')(?:"?)\\b','gi');
 function sqlize(sql) {
  let s=String(sql).replace(/\bINSERT\s+OR\s+IGNORE\s+INTO\b/gi,'INSERT INTO');
@@ -54,6 +54,21 @@ async function bootstrap(){
    token_hash TEXT PRIMARY KEY,email TEXT NOT NULL REFERENCES mahach_stage.admins(email),csrf TEXT NOT NULL,expires BIGINT NOT NULL
  )`);
  await pool.query('CREATE INDEX IF NOT EXISTS mahach_sessions_expires_idx ON mahach_stage.sessions(expires)');
+ // Contatos do cliente ficam privados no Neon; sem dados de cartão e sem exposição pública.
+ await pool.query(`CREATE TABLE IF NOT EXISTS mahach_stage.customers (
+   email TEXT PRIMARY KEY,
+   name TEXT NOT NULL,
+   phone TEXT NOT NULL,
+   marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE,
+   marketing_consent_at TIMESTAMPTZ,
+   first_order_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   last_order_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   last_order_id TEXT,
+   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ )`);
+ await pool.query('CREATE INDEX IF NOT EXISTS mahach_customers_recent_idx ON mahach_stage.customers(last_order_at DESC)');
+ await pool.query('ALTER TABLE mahach_stage.orders ADD COLUMN IF NOT EXISTS marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE');
  // O importador de staging preservou valores/colunas, mas não criou defaults.
  const defaults={shipping_note:"''",tracking_code:"''",tracking_url:"''",shipping_service:"''",
   payment_status:"'pendente'",bling_export_status:"'nao_enviado'",customer_email:"''",

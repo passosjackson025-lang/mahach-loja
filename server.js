@@ -48,7 +48,7 @@ async function session(req){const token=cookies(req).mahach_session;if(!token||!
 async function logged(req,res){const s=await session(req);if(!s){problem(res,401,'Acesso restrito ao administrador');return null}return s}
 function checkOrigin(req){const o=req.headers.origin;const host=req.headers.host;if(!o||!host)return false;try{const u=new URL(o);return u.host===host&&(u.protocol==='http:'||u.protocol==='https:')}catch{return false}}
 function canWrite(req,s){return checkOrigin(req)&&req.headers['x-csrf-token']===s.csrf}
-function cookieValue(req,value,maxAge=28800){const secure=process.env.NODE_ENV==='production'?'; Secure':'';return `mahach_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`}
+function cookieValue(req,value,maxAge=28800){const secure=(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)?'; Secure':'';return `mahach_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`}
 const counters=new Map();
 function rate(req,key,max,window=60000){const ip=req.socket.remoteAddress||'local',n=Date.now(),k=`${key}:${ip}`,v=counters.get(k)||{time:n,count:0};if(n-v.time>window){v.time=n;v.count=0}v.count++;counters.set(k,v);if(counters.size>4000)for(const [k,v]of counters)if(n-v.time>3600000)counters.delete(k);return v.count<=max}
 function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku}}
@@ -67,7 +67,7 @@ async function staticFile(req,res,url){
 }
 function security(res){
  const csp="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; font-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"+(process.env.NODE_ENV==='production'?'; upgrade-insecure-requests':'');
- res.setHeader('Content-Security-Policy',csp);res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');res.setHeader('X-Permitted-Cross-Domain-Policies','none');res.setHeader('Origin-Agent-Cluster','?1');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');res.setHeader('Cross-Origin-Resource-Policy','same-origin');if(process.env.NODE_ENV==='production')res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
+ res.setHeader('Content-Security-Policy',csp);res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');res.setHeader('X-Permitted-Cross-Domain-Policies','none');res.setHeader('Origin-Agent-Cluster','?1');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');res.setHeader('Cross-Origin-Resource-Policy','same-origin');res.setHeader('Cross-Origin-Opener-Policy','same-origin');if(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
 }
 async function vendizapFetch(endpoint){const id=conf('VENDIZAP_ID'),secret=conf('VENDIZAP_SECRET');if(!id||!secret)throw Object.assign(new Error('Integração Vendizap não configurada'),{status:503});const res=await fetch('https://app.vendizap.com/api/'+endpoint,{headers:{'X-Auth-Id':id,'X-Auth-Secret':secret,'User-Agent':'MahachLoja/2.0','Accept':'application/json'},signal:AbortSignal.timeout(12000)});if(!res.ok)throw Object.assign(new Error('Vendizap respondeu '+res.status),{status:502});return res.json()}
 async function syncVendizap(){let updates=0,images=0;
@@ -134,7 +134,7 @@ async function sendTransactional(orderId,kind){
  const trackingPage='https://rastreamento.correios.com.br/app/index.php';
  const customerSubject=approved?'MAHACH: pagamento aprovado · '+o.id:tracking?'MAHACH: seu código de rastreio · '+o.id:'MAHACH: pedido registrado · '+o.id;
  const quickDelivery=['uber','99'].includes(o.delivery);
- const custHtml=summary+(tracking?`<p>Seu código dos Correios: <strong>${esc(o.tracking_code)}</strong></p><p>Consulte diretamente em <a href="${trackingPage}">Rastreamento Correios</a>.</p>`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. A loja dará sequência à separação do pedido.</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':o.delivery==='correios'?'<p>O código de rastreamento dos Correios será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
+ const custHtml=summary+(tracking?`<p>Seu código dos Correios: <strong>${esc(o.tracking_code)}</strong></p><p>Consulte diretamente em <a href="${trackingPage}">Rastreamento Correios</a>.</p>`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe MAHACH.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':o.delivery==='correios'?'<p>O código de rastreamento dos Correios será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
  const result={};
  const flag=tracking?'tracking_email_sent':'customer_email_sent';
  if(customer&&!o[flag]){result.customer=await commerce.sendEmail(conf,customer,customerSubject,custHtml);if(result.customer.ok)(await db.prepare('UPDATE orders SET '+flag+'=1 WHERE id=?').run(orderId))}
@@ -142,16 +142,37 @@ async function sendTransactional(orderId,kind){
  return result;
 }
 async function processVerifiedPayment(paymentId){
- const pay=await commerce.getVerifiedPayment(conf,paymentId);const id=str(pay.external_reference,40);
- const o=(await db.prepare('SELECT * FROM orders WHERE id=?').get(id));if(!o||o.payment==='cash'||o.payment==='assist')return {ignored:true};
+ const pay=await commerce.getVerifiedPayment(conf,paymentId),id=str(pay.external_reference,40);
+ const o=await db.prepare('SELECT * FROM orders WHERE id=?').get(id);
+ if(!o||!['pix','card'].includes(o.payment))return {ignored:true};
  const expected=commerce.cents(Number(o.subtotal)+Number(o.shipping_cost||0));
  if(pay.currency_id!=='BRL'||commerce.cents(pay.transaction_amount)!==expected)return {ignored:true,reason:'Valor divergente'};
- if(pay.status==='approved'){
-  if(o.mp_payment_id&&o.mp_payment_id!==String(pay.id))return {ignored:true,reason:'Pagamento diferente do registrado'};
-  (await db.prepare("UPDATE orders SET payment_status='aprovado',status=CASE WHEN status='pedido_criado' THEN 'pagamento_aprovado' ELSE status END,mp_payment_id=? WHERE id=? AND payment_status<>'aprovado'").run(String(pay.id),id));
-  await sendTransactional(id,'approved');return {approved:true};
- }
- return {approved:false};
+ if(pay.status!=='approved')return {approved:false};
+ const applied=await db.transaction(async()=>{
+  const locked=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(id);
+  if(!locked||locked.payment_status==='aprovado')return false;
+  // Não confirma o mesmo pedido com identificadores de pagamento diferentes.
+  if(locked.mp_payment_id&&locked.mp_payment_id!==String(pay.id))return false;
+  let missingStock=false;
+  const reserved=[];
+  const snapshot=JSON.parse(locked.items_json).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+  for(const item of snapshot){
+   const qty=Number(item.qty),product=await db.prepare('SELECT stock FROM products WHERE id=? FOR UPDATE').get(item.id);
+   if(!product||!Number.isInteger(qty)||qty<1||qty>20){missingStock=true;continue}
+   if(product.stock!==null){
+    if(product.stock<qty){missingStock=true;continue}
+    reserved.push({id:item.id,qty});
+   }
+  }
+  // Se faltar qualquer item, nenhuma unidade é debitada automaticamente.
+  if(!missingStock)for(const line of reserved)await db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(line.qty,line.id);
+  const nextStatus=missingStock?'estoque_pendente':'pagamento_aprovado';
+  await db.prepare('UPDATE orders SET payment_status=?,status=?,mp_payment_id=? WHERE id=?')
+   .run('aprovado',nextStatus,String(pay.id),id);
+  return true;
+ });
+ if(applied)await sendTransactional(id,'approved');
+ return {approved:true,newlyConfirmed:applied};
 }
 async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/health'&&method==='GET')return json(res,200,{ok:true,catalog:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n});
@@ -233,8 +254,20 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    const mp=await commerce.createPreference(conf,order,snapshot,token);
    checkoutUrl=mp.checkoutUrl;mpPreferenceId=mp.preferenceId;
   }
-  await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-  .run(id,hash(token),created,'pedido_criado',customer_name,phone,email,delivery==='pickup'?'':cep,delivery==='pickup'?'':address,delivery,payment,JSON.stringify(snapshot),subtotal,freight,assist?'Mercadoria paga online; corrida Uber/99 NÃO incluída no total. Negociar por WhatsApp após pagamento aprovado':delivery==='pickup'?'Retirada sem frete; '+(conf('SHOP_ADDRESS')||'endereço a informar'):'Correios · cotação selecionada',shippingService,mpPreferenceId);
+  const marketingOptIn=data.marketingOptIn===true || data.marketingOptIn==='on';
+  await db.transaction(async()=>{
+   await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id,marketing_opt_in) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(id,hash(token),created,'pedido_criado',customer_name,phone,email,delivery==='pickup'?'':cep,delivery==='pickup'?'':address,delivery,payment,JSON.stringify(snapshot),subtotal,freight,assist?'Mercadoria paga online; corrida Uber/99 NÃO incluída no total. Negociar por WhatsApp após pagamento aprovado':delivery==='pickup'?'Retirada sem frete; '+(conf('SHOP_ADDRESS')||'endereço a informar'):'Correios · cotação selecionada',shippingService,mpPreferenceId,marketingOptIn);
+   // Uma compra sem marcar a opção NUNCA concede permissão para marketing.
+   // Um opt-in registrado anteriormente não é apagado por uma compra posterior.
+   await db.prepare(`INSERT INTO customers(email,name,phone,marketing_opt_in,marketing_consent_at,first_order_at,last_order_at,last_order_id)
+    VALUES(?,?,?,?,CASE WHEN ? THEN NOW() ELSE NULL END,NOW(),NOW(),?)
+    ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name,phone=EXCLUDED.phone,
+    marketing_opt_in=customers.marketing_opt_in OR EXCLUDED.marketing_opt_in,
+    marketing_consent_at=CASE WHEN EXCLUDED.marketing_opt_in THEN NOW() ELSE customers.marketing_consent_at END,
+    last_order_at=NOW(),last_order_id=EXCLUDED.last_order_id,updated_at=NOW()`)
+    .run(email,customer_name,phone,marketingOptIn,marketingOptIn,id);
+  });
   if(delivery==='correios')liveQuotes.delete(hash(str(data.quoteId,80)));
   if(payment==='cash')await sendTransactional(id,'created');
   return json(res,201,{reference:id,token,mode:['pix','card'].includes(payment)?'online':'pickup-cash',checkoutUrl,whatsapp:'',notice:assist?'Pague os produtos pelo Mercado Pago. O custo da corrida NÃO está incluído; após pagamento aprovado, combine a entrega no WhatsApp.':payment==='cash'?'Pedido registrado. Pagamento em dinheiro na retirada.':'Pedido registrado; o pagamento será feito no ambiente seguro do Mercado Pago e só será confirmado após verificação.'});
@@ -285,7 +318,28 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
 
  if(route==='/api/admin/logout'&&method==='POST'){const t=cookies(req).mahach_session;(await db.prepare('DELETE FROM sessions WHERE token_hash=?').run(hash(t)));res.setHeader('Set-Cookie',cookieValue(req,'',0));return json(res,200,{ok:true})}
- if(route==='/api/admin/stats'&&method==='GET')return json(res,200,{products:(await db.prepare('SELECT COUNT(*) n FROM products').get()).n,photos:(await db.prepare("SELECT COUNT(*) n FROM products WHERE image<>''").get()).n,orders:(await db.prepare('SELECT COUNT(*) n FROM orders').get()).n,pending:(await db.prepare("SELECT COUNT(*) n FROM orders WHERE status IN ('pedido_criado','aguardando_confirmacao')").get()).n,outOfStock:(await db.prepare('SELECT COUNT(*) n FROM products WHERE stock=0 AND active=1').get()).n,visible:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n,categories:(await db.prepare('SELECT COUNT(*) n FROM categories').get()).n,vendizapConfigured:!!(conf('VENDIZAP_ID')&&conf('VENDIZAP_SECRET')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),blingConfigured:!!(conf('BLING_CLIENT_ID')&&conf('BLING_CLIENT_SECRET')),mercadoPagoConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL'))});
+ if(route==='/api/admin/customers'&&method==='GET'){
+  if(!rate(req,'customers',90,60000))return problem(res,429,'Aguarde antes de consultar os clientes');
+  const page=Math.max(1,Math.min(10000,Number.parseInt(u.searchParams.get('page'),10)||1));
+  const q=str(u.searchParams.get('q'),100).toLowerCase();
+  const consent=u.searchParams.get('marketing')==='yes';
+  const terms=[],args=[];
+  if(q){terms.push('(name ILIKE ? OR email ILIKE ? OR phone ILIKE ?)');args.push('%'+q+'%','%'+q+'%','%'+q+'%')}
+  if(consent)terms.push('marketing_opt_in=TRUE');
+  const where=terms.length?' WHERE '+terms.join(' AND '):'';
+  const count=(await db.prepare('SELECT COUNT(*) n FROM customers'+where).get(...args)).n;
+  const rows=await db.prepare('SELECT email,name,phone,marketing_opt_in,marketing_consent_at,first_order_at,last_order_at,last_order_id FROM customers'+where+' ORDER BY last_order_at DESC LIMIT 30 OFFSET ?').all(...args,(page-1)*30);
+  return json(res,200,{page,total:count,customers:rows});
+ }
+ // Administrador pode retirar uma permissão a pedido do cliente, jamais concedê-la.
+ const customerOptout=route.match(/^\/api\/admin\/customers\/([^/]+)\/optout$/);
+ if(customerOptout&&method==='POST'){
+  let email;try{email=decodeURIComponent(customerOptout[1]).toLowerCase()}catch{return problem(res,400,'E-mail inválido')}
+  if(email.length>200||!/^\S+@\S+\.\S+$/.test(email))return problem(res,400,'E-mail inválido');
+  const x=await db.prepare('UPDATE customers SET marketing_opt_in=FALSE,marketing_consent_at=NULL,updated_at=NOW() WHERE email=?').run(email);
+  return x.changes?json(res,200,{ok:true}):problem(res,404,'Cliente não encontrado');
+ }
+ if(route==='/api/admin/stats'&&method==='GET')return json(res,200,{products:(await db.prepare('SELECT COUNT(*) n FROM products').get()).n,photos:(await db.prepare("SELECT COUNT(*) n FROM products WHERE image<>''").get()).n,orders:(await db.prepare('SELECT COUNT(*) n FROM orders').get()).n,customers:(await db.prepare('SELECT COUNT(*) n FROM customers').get()).n,pending:(await db.prepare("SELECT COUNT(*) n FROM orders WHERE status IN ('pedido_criado','aguardando_confirmacao')").get()).n,outOfStock:(await db.prepare('SELECT COUNT(*) n FROM products WHERE stock=0 AND active=1').get()).n,visible:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n,categories:(await db.prepare('SELECT COUNT(*) n FROM categories').get()).n,vendizapConfigured:!!(conf('VENDIZAP_ID')&&conf('VENDIZAP_SECRET')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),blingConfigured:!!(conf('BLING_CLIENT_ID')&&conf('BLING_CLIENT_SECRET')),mercadoPagoConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL'))});
  if(route==='/api/admin/import-csv'&&method==='POST'){if(!rate(req,'import',4,3600000))return problem(res,429,'Limite de importações excedido');const raw=await bodyCsv(req);try{return json(res,200,await importIntoPg(db,raw,searchText,secureUrl))}catch(e){return problem(res,400,e.message)}}
  if(route==='/api/admin/products'&&method==='GET'){
  const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number(u.searchParams.get('page'))||1));const where=q?'WHERE name ILIKE ? OR brand ILIKE ?':'',args=q?['%'+q+'%','%'+q+'%']:[];
@@ -295,6 +349,11 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  const p=await validProduct(await body(req));p.id='custom-'+crypto.randomBytes(12).toString('hex');(await db.prepare('INSERT INTO products(id,name,price,description,category,brand,family,image,sku,stock,weight,width,height,length,active,search_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id,p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text));return json(res,201,{id:p.id});
  }
  const edit=route.match(/^\/api\/admin\/products\/([\w-]{5,80})$/);
+ // Ocultar sem apagar fisicamente: preserva histórico e referências de pedidos.
+ if(edit&&method==='DELETE'){
+  const removed=await db.prepare('UPDATE products SET active=0 WHERE id=?').run(edit[1]);
+  return removed.changes?json(res,200,{ok:true,archived:true}):problem(res,404,'Produto não encontrado');
+ }
  if(edit&&method==='PUT'){
  if(!(await db.prepare('SELECT id FROM products WHERE id=?').get(edit[1])))return problem(res,404,'Produto não encontrado');const p=await validProduct(await body(req));(await db.prepare('UPDATE products SET name=?,price=?,description=?,category=?,brand=?,family=?,image=?,sku=?,stock=?,weight=?,width=?,height=?,length=?,active=?,search_text=? WHERE id=?').run(p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,edit[1]));return json(res,200,{ok:true});
  }
@@ -323,7 +382,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
  const orderEdit=route.match(/^\/api\/admin\/orders\/(MH-[A-Z0-9]+)$/);
  if(orderEdit&&method==='PUT'){
- const x=await body(req),status=str(x.status,40),tracking_code=str(x.tracking_code,100),tracking_url=secureUrl(str(x.tracking_url,1500));if(!['pedido_criado','aguardando_confirmacao','pagamento_aprovado','em_preparacao','enviado','pronto_retirada','concluido','cancelado'].includes(status))return problem(res,400,'Status inválido');const old=(await db.prepare('SELECT delivery,payment,payment_status,tracking_code FROM orders WHERE id=?').get(orderEdit[1]));if(!old)return problem(res,404,'Pedido não encontrado');
+ const x=await body(req),status=str(x.status,40),tracking_code=str(x.tracking_code,100),tracking_url=secureUrl(str(x.tracking_url,1500));if(!['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','enviado','pronto_retirada','concluido','cancelado'].includes(status))return problem(res,400,'Status inválido');const old=(await db.prepare('SELECT delivery,payment,payment_status,tracking_code FROM orders WHERE id=?').get(orderEdit[1]));if(!old)return problem(res,404,'Pedido não encontrado');
  if(['pix','card'].includes(old.payment)&&status==='pagamento_aprovado'&&old.payment_status!=='aprovado')return problem(res,409,'Pagamento online deve ser aprovado pelo Mercado Pago, nunca manualmente');
  const changed=old.tracking_code!==tracking_code;
  (await db.prepare("UPDATE orders SET status=?,tracking_code=?,tracking_url=?,payment_status=CASE WHEN ?='pagamento_aprovado' AND payment='cash' THEN 'aprovado' ELSE payment_status END,tracking_email_sent=CASE WHEN tracking_code<>? THEN 0 ELSE tracking_email_sent END WHERE id=?").run(status,tracking_code,tracking_url,status,tracking_code,orderEdit[1]));

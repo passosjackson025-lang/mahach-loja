@@ -15,3 +15,9 @@ button{transition:background .18s ease,transform .18s ease,border-color .18s eas
 #settingsResult,#connectionTestResult,#appMessage{overflow-wrap:anywhere}.panel-section>h2{margin-top:0}.edit-dialog{border-radius:14px;padding:clamp(17px,3vw,30px)}
 @media(max-width:760px){.admin-nav{gap:8px}.admin-main{padding:22px 15px}.admin-record button{padding:9px 11px}.photo-upload{grid-template-columns:82px minmax(0,1fr);gap:10px}.photo-upload img{width:80px;height:80px}.settings-group{padding:15px}.settings-group legend{font-size:20px}.stat strong{font-size:27px}.admin-nav nav button{padding:9px 11px}}
 @media(prefers-reduced-motion:reduce){button{transition:none!important;transform:none!important}}
+
+/* Área privada de clientes */
+.customer-filter{display:flex;align-items:center;gap:7px;white-space:normal;font-size:12px;max-width:260px}
+.customer-filter input{width:18px;height:18px;min-height:18px}
+.customer-record{flex-wrap:wrap}.customer-record .info{flex:2;min-width:190px}.customer-consent{font-size:12px;color:#584b3c;min-width:170px}
+@media(max-width:760px){.customer-filter{max-width:100%;margin:6px 0}}

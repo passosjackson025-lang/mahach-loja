@@ -1,12 +1,25 @@
 'use strict';
 (async()=>{
- const params=new URLSearchParams(location.search),reference=params.get('reference')||'',token=params.get('token')||'';
+ const params=new URLSearchParams(location.search),reference=params.get('reference')||'';
+ let token='';try{token=sessionStorage.getItem('mahach-order-token-'+reference)||''}catch{}
+ // Links de pedidos criados por versões antigas ainda podem conter token.
+ if(!token)token=params.get('token')||'';
  const message=document.querySelector('#paymentMessage'),track=document.querySelector('#trackOrder'),wa=document.querySelector('#quickDelivery');
- if(!/^MH-[A-F0-9]{10}$/.test(reference)||!token){message.textContent='Dados do pedido incompletos. Consulte o acompanhamento de pedidos.';return}
+ if(!/^MH-[A-F0-9]{10}$/.test(reference)||!token){message.textContent='Não foi possível recuperar os dados do pedido neste navegador. Consulte o acompanhamento ou entre em contato com a loja com o número do pedido.';return}
  const trackUrl=new URL('/acompanhar.html',location.origin);trackUrl.searchParams.set('reference',reference);trackUrl.searchParams.set('token',token);track.href=trackUrl.pathname+trackUrl.search;
- try{
-  const q=new URLSearchParams({reference,token});const res=await fetch('/api/payments/status?'+q,{cache:'no-store'});const data=await res.json();if(!res.ok)throw Error('Não foi possível consultar o pedido neste momento.');
-  const approved=data.paymentStatus==='aprovado';message.textContent=approved?'Pagamento aprovado. Seu pedido está em andamento.':'Pedido registrado. A confirmação do pagamento ainda está pendente.';
-  if(approved&&data.whatsapp&&data.whatsapp.startsWith('https://wa.me/')){wa.href=data.whatsapp;wa.hidden=false}
- }catch{message.textContent='Não foi possível consultar o status agora. Tente novamente na página de acompanhamento.'}
+ let attempts=0;
+ async function checkStatus(){
+  try{
+   const q=new URLSearchParams({reference,token}),res=await fetch('/api/payments/status?'+q,{cache:'no-store'}),data=await res.json();
+   if(!res.ok)throw Error('Pedido não encontrado');
+   const approved=data.paymentStatus==='aprovado';
+   message.textContent=approved?'Pagamento confirmado. Seu pedido está registrado e será preparado pela loja.':
+    'Pedido registrado. Aguardando confirmação segura do Mercado Pago. Não faça um novo pagamento sem consultar o pedido.';
+   if(approved&&data.whatsapp&&data.whatsapp.startsWith('https://wa.me/')){wa.href=data.whatsapp;wa.hidden=false}
+   if(!approved&&++attempts<8)setTimeout(checkStatus,5000);
+  }catch{
+   message.textContent='Não foi possível consultar o status agora. Consulte o acompanhamento do pedido antes de tentar pagar novamente.';
+  }
+ }
+ await checkStatus();
 })();
