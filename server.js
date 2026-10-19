@@ -316,10 +316,15 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const provider=str((await body(req)).provider,30);
   if(provider==='vendizap'){const data=await vendizapFetch('categorias?limit=1');return json(res,200,{ok:true,message:'Vendizap respondeu com sucesso; autenticação confirmada.'});}
   if(provider==='melhor-envio'){
-   const token=conf('MELHOR_ENVIO_TOKEN');if(!token)return problem(res,400,'Configure o token');
+   const token=String(conf('MELHOR_ENVIO_TOKEN')||'').trim().replace(/^Bearer\s+/i,'');
+   if(!token)return problem(res,400,'Configure o token do Melhor Envio');
    const base=conf('MELHOR_ENVIO_SANDBOX')==='true'?'https://sandbox.melhorenvio.com.br':'https://melhorenvio.com.br';
-   const response=await fetch(base+'/api/v2/me',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'MAHACH ('+(conf('SHIPPING_CONTACT_EMAIL')||'contato@mahach.com.br')+')'},signal:AbortSignal.timeout(10000)});
-   if(!response.ok)return problem(res,502,'Melhor Envio recusou autenticação (HTTP '+response.status+')');return json(res,200,{ok:true,message:'Melhor Envio autenticou com sucesso.'});
+   // Rota de consulta GET documentada pelo Melhor Envio (sem criar etiquetas).
+   const response=await fetch(base+'/api/v2/me/orders',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'MAHACH ('+(conf('SHIPPING_CONTACT_EMAIL')||'contato@mahach.com.br')+')'},signal:AbortSignal.timeout(10000)});
+   if(response.status===401)return problem(res,502,'Melhor Envio recusou este token (HTTP 401). Confira validade, ambiente e permissoes no Melhor Envio.');
+   if(response.status===403)return problem(res,502,'Melhor Envio bloqueou ou negou a consulta de etiquetas (HTTP 403). Verifique as permissoes do token; teste inconclusivo.');
+   if(!response.ok)return problem(res,502,'Melhor Envio respondeu HTTP '+response.status+' ao consultar etiquetas.');
+   return json(res,200,{ok:true,message:'Melhor Envio autenticou com sucesso na API oficial.'});
   }
   if(provider==='mercado-pago'){
    const token=conf('MERCADO_PAGO_ACCESS_TOKEN');if(!token)return problem(res,400,'Configure o Access Token');
