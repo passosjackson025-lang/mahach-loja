@@ -46,6 +46,11 @@ async function validProduct(data){
 function cookies(req){return Object.fromEntries((req.headers.cookie||'').split(';').map(x=>x.trim().split('=')).filter(x=>x.length===2))}
 async function session(req){const token=cookies(req).mahach_session;if(!token||!/^[-\w]{40,60}$/.test(token))return null;return (await db.prepare('SELECT email,csrf,expires FROM sessions WHERE token_hash=? AND expires>?').get(hash(token),Date.now()))||null}
 async function logged(req,res){const s=await session(req);if(!s){problem(res,401,'Acesso restrito ao administrador');return null}return s}
+// A flag de teste NUNCA libera compras ao publico: exige sessao administrativa valida.
+async function checkoutAllowed(req){
+ if(process.env.MAHACH_ENABLE_CHECKOUT==='true')return true;
+ return process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&!!(await session(req));
+}
 function checkOrigin(req){const o=req.headers.origin;const host=req.headers.host;if(!o||!host)return false;try{const u=new URL(o);return u.host===host&&(u.protocol==='http:'||u.protocol==='https:')}catch{return false}}
 function canWrite(req,s){return checkOrigin(req)&&req.headers['x-csrf-token']===s.csrf}
 function cookieValue(req,value,maxAge=28800){const secure=(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)?'; Secure':'';return `mahach_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`}
@@ -176,7 +181,7 @@ async function processVerifiedPayment(paymentId){
 }
 async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/health'&&method==='GET')return json(res,200,{ok:true,catalog:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n});
- if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:process.env.MAHACH_ENABLE_CHECKOUT==='true'},{'Cache-Control':'no-store'});
+ if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:await checkoutAllowed(req),testMode:process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&process.env.MAHACH_ENABLE_CHECKOUT!=='true'},{'Cache-Control':'no-store'});
  if(route==='/api/meta'&&method==='GET'){
   const requestedCategory=str(u.searchParams.get('category'),64);
   const categories=(await db.prepare(`SELECT c.id,c.name,c.subtitle,COUNT(p.id) total
@@ -214,7 +219,8 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  return json(res,200,{options,notice:'Cotação estimada. Etiqueta e prazo final serão confirmados pela loja.'});
  }
  if(route==='/api/payments/mercadopago/webhook'&&method==='POST'){
-  if(process.env.MAHACH_ENABLE_CHECKOUT!=='true')return problem(res,503,'Checkout de teste ainda não habilitado');
+  // Notificacoes externas nao possuem cookie; continuam exigindo HMAC valido.
+  if(process.env.MAHACH_ENABLE_CHECKOUT!=='true'&&process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE!=='true')return problem(res,503,'Checkout de teste ainda não habilitado');
   if(!rate(req,'mp-webhook',160,60000))return problem(res,429,'Limite de notificações');
   const id=commerce.verifyMPWebhook(conf,req,u);if(!id)return problem(res,401,'Assinatura inválida');
   await body(req);const result=await processVerifiedPayment(id);return json(res,200,{received:true,...result});
@@ -228,10 +234,12 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   return json(res,200,{reference:o.id,paymentStatus:o.payment_status,delivery:o.delivery,status:o.status,whatsapp});
  }
  if(route==='/api/orders'&&method==='POST'){
-  if(process.env.MAHACH_ENABLE_CHECKOUT!=='true')return problem(res,503,'Checkout de teste ainda não habilitado');
+  if(!await checkoutAllowed(req))return problem(res,503,'Checkout indisponivel para visitantes durante os testes');
   if(!rate(req,'order',8,900000))return problem(res,429,'Muitas solicitações. Tente mais tarde');
   if(!checkOrigin(req))return problem(res,403,'Origem não autorizada');
   const data=await body(req),items=await collectItems(data.items);if(!items.length)return problem(res,400,'Sua sacola está vazia');
+  // Nunca permitir pagamento se a loja nao sabe quantas unidades tem.
+  if(items.some(({p})=>p.stock===null||p.stock===undefined))return problem(res,400,'Informe o estoque dos produtos antes de receber pagamentos');
   const customer_name=str(data.name,120),phone=str(data.phone,20).replace(/\D/g,''),email=str(data.email,200).toLowerCase(),delivery=str(data.delivery,20),payment=str(data.payment,30),cep=str(data.cep,12).replace(/\D/g,''),address=str(data.address,320);
   if(customer_name.length<3||phone.length<10||phone.length>13||!/^\S+@\S+\.\S+$/.test(email)||!['pickup','correios','uber','99'].includes(delivery)||!['cash','pix','card','assist'].includes(payment))return problem(res,400,'Confira nome, e-mail, entrega e pagamento');
   const assist=['uber','99'].includes(delivery);

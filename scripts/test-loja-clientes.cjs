@@ -64,6 +64,18 @@ async function main(){await ready;await new Promise(r=>server.listen(0,'127.0.0.
   assert.equal(list.customers[0].email,'cliente@exemplo.test');
   r=await fetch(base+'/api/admin/customers/'+encodeURIComponent(customer.email)+'/optout',{method:'POST',headers:{Cookie:cookie,Origin:base,'x-csrf-token':info.csrf,'Content-Type':'application/json'},body:'{}'});
   assert.equal(r.status,200);assert.equal(customer.marketing_opt_in,false);
+  // Modo de teste: o publico continua sem checkout, mas um admin autenticado pode comprar.
+  process.env.MAHACH_ENABLE_CHECKOUT='false';
+  process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE='true';
+  r=await fetch(base+'/api/store/status');assert.equal((await r.json()).checkoutEnabled,false);
+  r=await fetch(base+'/api/store/status',{headers:{Cookie:cookie}});assert.equal((await r.json()).checkoutEnabled,true);
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'pix',items:[{id:'perfume-123',qty:1}]})});
+  assert.equal(r.status,503,'Visitante nao deve conseguir criar pedido no modo privado');
+  // A autorizacao HMAC do webhook funciona mesmo sem sessao de administrador.
+  r=await webhook();assert.equal(r.status,200);
+  process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE='false';
+  r=await fetch(base+'/api/store/status',{headers:{Cookie:cookie}});assert.equal((await r.json()).checkoutEnabled,false);
+  console.log('TESTE PRIVADO OK: bloqueio publico, admin habilitado, webhook assinado.');
   console.log('CLIENTES / PEDIDOS OK (SIMULADO): opt-in, painel privado, descadastro, webhook HMAC, estoque e prevenção de duplicação.');
  }finally{await new Promise(r=>server.close(r));await db.close()}
 }
