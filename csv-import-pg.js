@@ -11,7 +11,9 @@ async function importIntoPg(db,raw,searchText,secureUrl){
   const upsert=db.prepare(`INSERT INTO products(id,name,price,description,category,brand,family,image,sku,stock,weight,width,height,length,active,search_text)
    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,price=excluded.price,description=excluded.description,
    category=excluded.category,brand=excluded.brand,sku=excluded.sku,stock=excluded.stock,weight=excluded.weight,
-   width=excluded.width,height=excluded.height,length=excluded.length,search_text=excluded.search_text`);
+   width=excluded.width,height=excluded.height,length=excluded.length,search_text=excluded.search_text,
+   stock_confirmed=CASE WHEN products.stock IS DISTINCT FROM excluded.stock THEN false ELSE products.stock_confirmed END,
+   shipping_confirmed=CASE WHEN (products.weight,products.width,products.height,products.length) IS DISTINCT FROM (excluded.weight,excluded.width,excluded.height,excluded.length) THEN false ELSE products.shipping_confirmed END`);
   const existingCats=new Set((await db.prepare('SELECT id FROM categories').all()).map(x=>x.id));
   let inserted=0,updated=0,newCategories=0,skipped=0;
   for(const row of rows){
@@ -26,7 +28,7 @@ async function importIntoPg(db,raw,searchText,secureUrl){
    const value=v=>{const n=Number(String(v).replace(',','.'));return Number.isFinite(n)&&n>0&&n<10000?n:null};
    const stock=row.stock===''?old?.stock??null:Number(row.stock),safeStock=Number.isInteger(stock)&&stock>=0?stock:null;
    const p={name:row.name,description:row.description.slice(0,10000),price,category:categoryId,
-    brand:row.brand||(brandLike?cat:old?.brand||''),family:old?.family||'',sku:row.sku||old?.sku||'',
+    brand:row.brand||(brandLike?cat:old?.brand||''),family:old?.family||'',sku:row.sku||old?.sku||('MHC-'+id.toUpperCase()),
     image:secureUrl(row.image)||old?.image||'',stock:safeStock,weight:value(row.weight)||old?.weight||null,
     width:value(row.width)||old?.width||null,height:value(row.height)||old?.height||null,length:value(row.length)||old?.length||null,active:old?.active??1};
    await upsert.run(id,p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,searchText(p));

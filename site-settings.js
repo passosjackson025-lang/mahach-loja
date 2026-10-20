@@ -17,6 +17,8 @@ const FIELDS=Object.freeze({
  BLING_REDIRECT_URI:{label:'URL de retorno Bling OAuth',kind:'url',section:'bling'},
  MERCADO_PAGO_PUBLIC_KEY:{label:'Chave pública Mercado Pago',kind:'text',section:'mercado-pago'},
  MERCADO_PAGO_ACCESS_TOKEN:{label:'Access Token Mercado Pago',kind:'secret',section:'mercado-pago'},
+ MERCADO_PAGO_PIX_ACCESS_TOKEN:{label:'Access Token da integração Pix via API Payments (opcional; usa o principal se vazio)',kind:'secret',section:'mercado-pago'},
+ MERCADO_PAGO_PIX_WEBHOOK_SECRET:{label:'Assinatura do Webhook da integração Pix (opcional)',kind:'secret',section:'mercado-pago'},
  MERCADO_PAGO_WEBHOOK_SECRET:{label:'Assinatura secreta do Webhook Mercado Pago',kind:'secret',section:'mercado-pago'},
  PUBLIC_SITE_URL:{label:'URL pública HTTPS do site (para retorno e webhook)',kind:'url',section:'mercado-pago'},
  RESEND_API_KEY:{label:'API Key Resend para e-mails transacionais',kind:'secret',section:'email'},

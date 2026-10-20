@@ -8,6 +8,7 @@ async function main(){
  const original=global.fetch;let requests=0;
  try{
   assert.equal(mp.accessToken(conf),'fake-token');
+  assert.equal(mp.accessToken(mp.pixConfiguration(k=>({MERCADO_PAGO_PIX_ACCESS_TOKEN:'pix-specific',MERCADO_PAGO_ACCESS_TOKEN:'card-specific'})[k]||'')),'pix-specific');
   const forwarded={headers:{'cf-connecting-ip':'203.0.113.10','x-forwarded-for':'192.0.2.99'},socket:{remoteAddress:'127.0.0.1'}};
   assert.equal(clientIp(forwarded,{}),'127.0.0.1','Local requests cannot forge their client IP');
   assert.equal(clientIp(forwarded,{RENDER_SERVICE_ID:'fake-render'}),'203.0.113.10');

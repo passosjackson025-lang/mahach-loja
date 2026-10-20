@@ -175,8 +175,8 @@ async function sendTransactional(orderId,kind){
  if(approved&&conf('ADMIN_EMAIL')&&!o.admin_email_sent){result.admin=await commerce.sendEmail(conf,conf('ADMIN_EMAIL'),'MAHACH: venda paga · '+o.id,summary+'<p>Pagamento verificado no Mercado Pago. Total: R$ '+total+'.</p>');if(result.admin.ok)(await db.prepare('UPDATE orders SET admin_email_sent=1 WHERE id=?').run(orderId))}
  return result;
 }
-async function processVerifiedPayment(paymentId){
- const pay=await commerce.getVerifiedPayment(conf,paymentId),id=str(pay.external_reference,40);
+async function processVerifiedPayment(paymentId,paymentConfiguration=conf){
+ const pay=await commerce.getVerifiedPayment(paymentConfiguration,paymentId),id=str(pay.external_reference,40);
  const o=await db.prepare('SELECT * FROM orders WHERE id=?').get(id);
  if(!o||!['pix','card'].includes(o.payment))return {ignored:true};
  const expected=commerce.cents(Number(o.subtotal)+Number(o.shipping_cost||0));
@@ -190,6 +190,7 @@ async function processVerifiedPayment(paymentId){
   await db.transaction(async()=>{
    const locked=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(id);
    if(!locked||(locked.mp_payment_id&&locked.mp_payment_id!==String(pay.id)))return;
+   if(['reembolsado','contestacao'].includes(locked.payment_status))return;
    if(locked.payment_status==='aprovado'&&!['refunded','charged_back'].includes(pay.status))return;
    if(pay.status==='cancelled'&&locked.payment_status!=='aprovado'&&locked.stock_reserved){
     for(const item of JSON.parse(locked.items_json).sort((a,b)=>String(a.id).localeCompare(String(b.id))))await db.prepare('UPDATE products SET stock=stock+? WHERE id=?').run(item.qty,item.id);
@@ -254,7 +255,7 @@ async function replayCheckout(res,identity){
   try{const mp=await cardCheckout(o.id,identity.token);json(res,200,{...result,mode:mp.paid?'paid':'online',checkoutUrl:mp.checkoutUrl||''})}
   catch{json(res,502,{error:'Checkout de cartão indisponível. Tente novamente para recuperar o mesmo pedido.',reference:o.id})}
  }else if(o.payment==='pix'){
-  const pix=o.mp_payment_id?commerce.pixDetails(await commerce.getVerifiedPayment(conf,o.mp_payment_id)):null;
+  const pix=o.mp_payment_id?commerce.pixDetails(await commerce.getVerifiedPayment(commerce.pixConfiguration(conf),o.mp_payment_id)):null;
   json(res,200,{...result,mode:pix?.qrCode?'pix':'pix-retry',pix,notice:'Pedido recuperado. Não crie outro pagamento.'});
  }else json(res,200,{...result,mode:'pickup-cash'});
  return true;
@@ -322,12 +323,13 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(liveQuotes.size>2000)for(const [key,item]of liveQuotes)if(Date.now()-item.created>600000)liveQuotes.delete(key);
  return json(res,200,{options,notice:'Cotação estimada. Etiqueta e prazo final serão confirmados pela loja.'});
  }
- if(route==='/api/payments/mercadopago/webhook'&&method==='POST'){
+ if(['/api/payments/mercadopago/webhook','/api/payments/mercadopago/pix-webhook'].includes(route)&&method==='POST'){
   // Notificacoes externas nao possuem cookie; continuam exigindo HMAC valido.
   // Continuar recebendo pagamentos já iniciados mesmo com novas compras suspensas.
   if(!rate(req,'mp-webhook',160,60000))return problem(res,429,'Limite de notificações');
-  const id=commerce.verifyMPWebhook(conf,req,u);if(!id)return problem(res,401,'Assinatura inválida');
-  await body(req);const result=await processVerifiedPayment(id);return json(res,200,{received:true,...result});
+  const paymentConfiguration=route.endsWith('/pix-webhook')?commerce.pixConfiguration(conf):conf;
+   const id=commerce.verifyMPWebhook(paymentConfiguration,req,u);if(!id)return problem(res,401,'Assinatura inválida');
+  await body(req);const result=await processVerifiedPayment(id,paymentConfiguration);return json(res,200,{received:true,...result});
  }
  if(route==='/api/payments/status'&&(method==='GET'||method==='POST')){
   if(!rate(req,'payment-status',25,60000))return problem(res,429,'Muitas consultas de pagamento');
@@ -478,8 +480,8 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    if(!response.ok)return problem(res,502,'Melhor Envio respondeu HTTP '+response.status+' ao consultar etiquetas.');
    return json(res,200,{ok:true,message:'Melhor Envio autenticou com sucesso na API oficial.'});
   }
-  if(provider==='mercado-pago'){
-   const token=commerce.accessToken(conf);if(!token)return problem(res,400,'Configure o Access Token');
+  if(provider==='mercado-pago'||provider==='mercado-pago-pix'){
+   const token=commerce.accessToken(provider==='mercado-pago-pix'?commerce.pixConfiguration(conf):conf);if(!token)return problem(res,400,'Configure o Access Token');
    const response=await fetch('https://api.mercadopago.com/users/me',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},signal:AbortSignal.timeout(10000)});
    if(!response.ok)return problem(res,502,'Mercado Pago recusou autenticação (HTTP '+response.status+')');return json(res,200,{ok:true,message:'Token aceito na consulta da conta. Isto não homologa Pix, cartão ou permissões de cobrança.'});
   }
@@ -562,7 +564,16 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(['pix','card'].includes(old.payment)&&['pagamento_aprovado','em_preparacao','embalado','enviado','pronto_retirada','concluido'].includes(status)&&old.payment_status!=='aprovado')return problem(res,409,'Pagamento online deve ser aprovado pelo Mercado Pago, nunca manualmente');
  if(status==='enviado'&&['correios','transportadora'].includes(old.delivery)&&(!tracking_code||!tracking_url))return problem(res,400,'Informe código e link HTTPS da transportadora antes de marcar como enviado');
  const changed=old.tracking_code!==tracking_code;
- (await db.prepare("UPDATE orders SET status=?,tracking_code=?,tracking_url=?,payment_status=CASE WHEN ?='pagamento_aprovado' AND payment='cash' THEN 'aprovado' ELSE payment_status END,tracking_email_sent=CASE WHEN tracking_code<>? THEN 0 ELSE tracking_email_sent END WHERE id=?").run(status,tracking_code,tracking_url,status,tracking_code,orderEdit[1]));
+ await db.transaction(async()=>{
+  const current=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(orderEdit[1]);
+  if(current.payment==='cash'&&current.stock_reserved){
+   if(status==='cancelado'&&current.payment_status!=='aprovado'){
+    for(const item of JSON.parse(current.items_json).sort((a,b)=>String(a.id).localeCompare(String(b.id))))await db.prepare('UPDATE products SET stock=stock+? WHERE id=?').run(item.qty,item.id);
+    await db.prepare('UPDATE orders SET stock_reserved=? WHERE id=?').run(false,current.id);
+   }else if(status==='pagamento_aprovado')await db.prepare('UPDATE orders SET stock_reserved=? WHERE id=?').run(false,current.id);
+  }
+  await db.prepare("UPDATE orders SET status=?,tracking_code=?,tracking_url=?,payment_status=CASE WHEN ?='pagamento_aprovado' AND payment='cash' THEN 'aprovado' ELSE payment_status END,tracking_email_sent=CASE WHEN tracking_code<>? THEN 0 ELSE tracking_email_sent END WHERE id=?").run(status,tracking_code,tracking_url,status,tracking_code,orderEdit[1]);
+ });
  const mail=['correios','transportadora'].includes(old.delivery)&&tracking_code&&changed&&['enviado','concluido'].includes(status)?await sendTransactional(orderEdit[1],'tracking'):{};
  let statusEmail={};if(old.status!==status)try{statusEmail=await sendTransactional(orderEdit[1],status==='pagamento_aprovado'?'approved':'status')}catch{statusEmail={customer:{ok:false,reason:'Notificação pendente'}}}
  return json(res,200,{ok:true,email:mail,statusEmail});

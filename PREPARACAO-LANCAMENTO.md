@@ -21,18 +21,18 @@ Produção permanece no commit 9494a87c0a59fa95ec7d1c3d5198a0a14895ec50 (V8), ve
 
 ## Evidência de testes
 A rodada no commit 3097a8f318808af7e7d356e187d277cf6886a613 passou nos testes unitários, testes legados, PostgreSQL 18 descartável, Chromium desktop (1440px) e mobile (390px), e npm audit sem vulnerabilidades reportadas.
-Rodadas seguintes devem passar novamente antes de publicar.
+A rodada 9be4701e2be9bc313f4a470e8bc5b66942336c4d também passou, incluindo verificação pública somente por GET: checkoutEnabled=false, páginas respondendo 200 e acesso administrativo/arquivos privados bloqueados. Rodadas seguintes devem passar novamente antes de publicar.
 O PostgreSQL de testes usa dados sintéticos locais. Mercado Pago, Melhor Envio, Resend e Cloudinary são simulados nos testes. NÃO é homologação real dos provedores.
 Cobertura: checkout repetido simultâneo, reserva de estoque, webhook simultâneo/duplicado/assinado, valor divergente, eventos atrasados, cotação invalidada por mudança de preço, arquivos privados, modal, sacola e Pix renderizado.
 O teste progressivo usa somente /api/health no ambiente descartável; os números NÃO representam capacidade do serviço Free em produção.
 Verificação pública usa apenas GET; não cria pedidos nem cobra valores.
 
 ## Bloqueios de lançamento
-1. MP_HTTP_401_7 ocorreu em produção após V8. Normalização de Bearer não comprova que a causa real foi resolvida. Precisamos de credencial apropriada à integração/ambiente, permissão de pagamentos e homologação real na conta. Consulta /users/me não comprova permissão de cobrança.
+1. MP_HTTP_401_7 ocorreu em produção após V8. A configuração permite token e segredo de webhook específicos do Pix (API Payments), separados do cartão (Checkout Pro). Isso permite corrigir a compatibilidade da aplicação sem trocar o fluxo de cartão. Normalização de Bearer não comprova que a causa real foi resolvida. Precisamos de credencial apropriada à integração/ambiente, permissão de pagamentos e homologação real na conta. Consulta /users/me não comprova permissão de cobrança.
 2. Estoque real, preço, SKU e embalagem de cada produto precisam de revisão manual. Imagens serão cadastradas pelo proprietário.
 3. E-mail: MAIL_FROM e ADMIN_EMAIL estavam vazios no banco consultado. Confirmar Resend, domínio/remetente e recebimento real.
 4. Frete: falta cotação real com uma sacola e embalagem confirmadas; restrições de perfumes e cobertura dependem do serviço.
-5. Render usa Free (hiberna). Upgrade de compute requer orçamento/aprovação; nenhum plano alterado. Limitação por IP atrás do proxy e armazenamento distribuído de cotações/rate limit ainda precisam de validação antes de escalar para múltiplas instâncias.
+5. Render usa Free (hiberna). Upgrade de compute requer orçamento/aprovação; nenhum plano alterado. A branch identifica CF-Connecting-IP somente quando hospedada na Render; confirmar esse cabeçalho no deploy. Cotações e rate limit usam memória de uma instância e precisam de armazenamento compartilhado antes de escalar horizontalmente.
 6. Nenhum snapshot nem agendamento de snapshot estava configurado no Neon. Snapshot é cobrado conforme tabela do provedor; não criado sem aprovação de cobrança.
 7. Migração foi preparada/testada em banco descartável, mas ainda não aplicada no Neon.
 
@@ -60,3 +60,5 @@ Reservas de pagamentos sem confirmação não devem ser liberadas manualmente en
 Cancelamento de pedido no painel não cancela nem reembolsa uma cobrança no Mercado Pago. Verificar o provedor antes de reconciliar estoque.
 O checkout de cartão reaproveita a preferência persistida. Uma falha de rede após o provedor criar a preferência e antes da persistência exige conciliação; não há afirmação de exatamente uma cobrança em todo cenário.
 Nenhuma declaração de segurança absoluta, disponibilidade absoluta ou 100% funcionalidade foi feita.
+
+Referências verificadas: https://neon.com/docs/guides/backup-restore (snapshot US$ 0,09/GB-mês); https://render.com/docs/free; https://developers.cloudflare.com/fundamentals/reference/http-headers/; https://www.mercadopago.com.br/developers/pt/docs/checkout-api-payments/integration-test/make-test-purchase

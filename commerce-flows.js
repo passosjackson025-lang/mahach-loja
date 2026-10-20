@@ -4,6 +4,9 @@ const MP='https://api.mercadopago.com';
 const cents=x=>Math.round(Number(x)*100);
 function httpsSite(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!['localhost','127.0.0.1'].includes(u.hostname)&&!u.search&&!u.hash?u.origin:null}catch{return null}}
 function accessToken(conf){return String(conf('MERCADO_PAGO_ACCESS_TOKEN')||'').trim().replace(/^Bearer\s+/i,'')}
+function pixConfiguration(conf){
+ return name=>name==='MERCADO_PAGO_ACCESS_TOKEN'?(conf('MERCADO_PAGO_PIX_ACCESS_TOKEN')||conf(name)):name==='MERCADO_PAGO_WEBHOOK_SECRET'?(conf('MERCADO_PAGO_PIX_WEBHOOK_SECRET')||conf(name)):conf(name);
+}
 function paymentUrl(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&/(^|\.)mercadopago\.com(\.br)?$/.test(u.hostname)?u.href:null}catch{return null}}
 function configured(conf){return !!(accessToken(conf)&&conf('MERCADO_PAGO_WEBHOOK_SECRET')&&httpsSite(conf('PUBLIC_SITE_URL')))}
 function htmlesc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -42,13 +45,14 @@ function pixDetails(pay){
  return {paymentId:String(pay?.id||''),qrCode,qrCodeBase64,expiresAt:typeof pay?.date_of_expiration==='string'?pay.date_of_expiration:''};
 }
 async function createPixPayment(conf,order,cpf){
+ conf=pixConfiguration(conf);
  if(!configured(conf))throw Object.assign(new Error('Mercado Pago nao configurado.'),{status:503});
  if(!validCPF(cpf))throw Object.assign(new Error('Confira o CPF para gerar o Pix.'),{status:400});
  const amount=cents(Number(order.subtotal)+Number(order.shipping_cost||0))/100;
  if(!(amount>=0.01&&amount<=1000000))throw Object.assign(new Error('Valor do pagamento invalido.'),{status:400});
  const body={transaction_amount:amount,description:'Pedido '+order.id+' - MAHACH',
   payment_method_id:'pix',external_reference:order.id,
-  notification_url:httpsSite(conf('PUBLIC_SITE_URL'))+'/api/payments/mercadopago/webhook',
+  notification_url:httpsSite(conf('PUBLIC_SITE_URL'))+'/api/payments/mercadopago/pix-webhook',
   payer:{email:order.customer_email,first_name:String(order.customer_name||'').split(/\s+/)[0],identification:{type:'CPF',number:String(cpf).replace(/\D/g,'')}}};
  // Mesma chave em cada tentativa do MESMO pedido: um pedido nunca gera 2 Pix.
  const key=crypto.createHash('sha256').update('MAHACH-PIX:'+order.id).digest('hex');
@@ -89,4 +93,4 @@ async function sendEmail(conf,to,subject,html){
  if(!result||typeof result.id!=='string'||!result.id)return {ok:false,reason:'Provedor não confirmou o identificador da mensagem'};
  return {ok:true,providerId:result.id};
 }
-module.exports={getPreference,accessToken,paymentUrl,cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};
+module.exports={pixConfiguration,getPreference,accessToken,paymentUrl,cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};

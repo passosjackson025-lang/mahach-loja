@@ -104,7 +104,7 @@ async function loadSettings(){
   box.append(grid);root.append(box);
  }
  const tests=$('#integrationTests');tests.replaceChildren();
- for(const [p,n]of [['vendizap','Testar Vendizap'],['melhor-envio','Testar Melhor Envio'],['mercado-pago','Testar Mercado Pago'],['bling','Verificar status Bling']]){
+ for(const [p,n]of [['vendizap','Testar Vendizap'],['melhor-envio','Testar Melhor Envio'],['mercado-pago','Testar Mercado Pago (cartão)'],['mercado-pago-pix','Testar conta da integração Pix'],['bling','Verificar status Bling']]){
   const b=elem('button',n);b.type='button';b.onclick=async()=>{b.disabled=true;$('#connectionTestResult').textContent='Verificando conexão…';try{const r=await api('/api/admin/integrations/test','POST',{provider:p});$('#connectionTestResult').textContent=r.message}catch(e){$('#connectionTestResult').textContent=e.message}finally{b.disabled=false}};tests.append(b)
  }
 }

@@ -8,7 +8,7 @@ const raw=new pg.Pool({connectionString:database,ssl:false});
 const originalLoad=Module._load,realFetch=global.fetch;
 let paymentStatus='pending',badAmount=false,paymentCalls=0,preferences=0,lastShipping=null,emailBodies=[];
 const payments=new Map();
-const config={DATABASE_URL:database,MAHACH_SETTINGS_KEY:'00'.repeat(32),MAHACH_ENABLE_CHECKOUT:'true',MAHACH_ENABLE_ADMIN_WRITES:'true',MERCADO_PAGO_ACCESS_TOKEN:'fake-token',MERCADO_PAGO_WEBHOOK_SECRET:'fake-webhook',PUBLIC_SITE_URL:'https://shop.invalid',MELHOR_ENVIO_TOKEN:'fake-shipping',ORIGIN_CEP:'08000000',MELHOR_ENVIO_SANDBOX:'true',RESEND_API_KEY:'fake-mail',MAIL_FROM:'MAHACH <mail@shop.invalid>',ADMIN_EMAIL:'admin@shop.invalid'};
+const config={DATABASE_URL:database,MAHACH_SETTINGS_KEY:'00'.repeat(32),MAHACH_ENABLE_CHECKOUT:'true',MAHACH_ENABLE_ADMIN_WRITES:'true',MERCADO_PAGO_ACCESS_TOKEN:'fake-token',MERCADO_PAGO_WEBHOOK_SECRET:'fake-webhook',MERCADO_PAGO_PIX_ACCESS_TOKEN:'fake-pix-token',MERCADO_PAGO_PIX_WEBHOOK_SECRET:'fake-pix-webhook',PUBLIC_SITE_URL:'https://shop.invalid',MELHOR_ENVIO_TOKEN:'fake-shipping',ORIGIN_CEP:'08000000',MELHOR_ENVIO_SANDBOX:'true',RESEND_API_KEY:'fake-mail',MAIL_FROM:'MAHACH <mail@shop.invalid>',ADMIN_EMAIL:'admin@shop.invalid'};
 Object.assign(process.env,config);
 function response(data,status=200){return {ok:status>=200&&status<300,status,json:async()=>data}}
 global.fetch=async(url,options={})=>{
@@ -37,10 +37,10 @@ global.fetch=async(url,options={})=>{
 let app,base,headers;
 const payload=(extra={})=>({name:'Cliente Teste',phone:'11999999999',email:'test@shop.invalid',delivery:'pickup',payment:'pix',pixCpf:'52998224725',items:[{id:'confirmed-product',qty:1}],...extra});
 const post=(path,data,extra={})=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',Origin:base,...extra},body:JSON.stringify(data)});
-async function webhook(id,valid=true){
+async function webhook(id,valid=true,pix=false){
  const ts=String(Math.floor(Date.now()/1000)),requestId='test-request';
- const signature=crypto.createHmac('sha256','fake-webhook').update('id:'+id+';request-id:'+requestId+';ts:'+ts+';').digest('hex');
- return fetch(base+'/api/payments/mercadopago/webhook?data.id='+id,{method:'POST',headers:{'Content-Type':'application/json','x-request-id':requestId,'x-signature':'ts='+ts+',v1='+(valid?signature:'0'.repeat(64))},body:'{}'});
+ const signature=crypto.createHmac('sha256',pix?'fake-pix-webhook':'fake-webhook').update('id:'+id+';request-id:'+requestId+';ts:'+ts+';').digest('hex');
+ return fetch(base+'/api/payments/mercadopago/'+(pix?'pix-webhook':'webhook')+'?data.id='+id,{method:'POST',headers:{'Content-Type':'application/json','x-request-id':requestId,'x-signature':'ts='+ts+',v1='+(valid?signature:'0'.repeat(64))},body:'{}'});
 }
 async function stock(id='confirmed-product'){return (await raw.query('SELECT stock FROM mahach_stage.products WHERE id=$1',[id])).rows[0].stock}
 async function main(){
@@ -76,6 +76,7 @@ async function main(){
  const orderId=orders[0].reference,payment=[...payments.values()][0];
  assert.equal(payments.size,1,'Idempotência Pix é por pedido');
  r=await webhook(payment.id,false);assert.equal(r.status,401);
+ r=await webhook(payment.id,true,true);assert.equal(r.status,200,'Assinatura Pix separada validada');
  badAmount=true;paymentStatus='approved';r=await webhook(payment.id);assert.equal(r.status,200);
  assert.equal((await raw.query('SELECT payment_status FROM mahach_stage.orders WHERE id=$1',[orderId])).rows[0].payment_status,'pendente','Valor divergente não confirma');
  badAmount=false;
@@ -99,6 +100,13 @@ async function main(){
  paymentStatus='cancelled';r=await webhook(lastPayment.id);assert.equal(r.status,200);assert.equal(Number(await stock()),1,'Cancelamento confirmado libera reserva');
  r=await webhook(lastPayment.id);assert.equal(r.status,200);assert.equal(Number(await stock()),1,'Cancelamento repetido não duplica estoque');
  assert.ok(emailBodies.length>=2,'Confirmação aceita pelo provedor simulado');
+ await raw.query("INSERT INTO mahach_stage.orders(id,delivery,payment,payment_status,status,items_json,stock_reserved) VALUES('MH-CASHCANCEL','pickup','cash','pendente','pedido_criado',$1,true)",[JSON.stringify([{id:'confirmed-product',qty:1}])]);
+ const beforeCancel=Number(await stock());
+ await raw.query("UPDATE mahach_stage.products SET stock=stock-1 WHERE id='confirmed-product'");
+ for(let i=0;i<2;i++){
+  r=await fetch(base+'/api/admin/orders/MH-CASHCANCEL',{method:'PUT',headers:{...headers,Origin:base,'Content-Type':'application/json'},body:JSON.stringify({status:'cancelado',tracking_code:'',tracking_url:''})});assert.equal(r.status,200);
+ }
+ assert.equal(Number(await stock()),beforeCancel,'Cancelar retirada em dinheiro libera reserva uma vez');
  if(process.env.MAHACH_BROWSER_TEST==='true'){
   paymentStatus='pending';
   await raw.query("UPDATE mahach_stage.products SET stock=3 WHERE id='confirmed-product'");
