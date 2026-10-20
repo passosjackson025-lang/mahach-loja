@@ -67,3 +67,15 @@ jobs:
         run: node scripts/test-integration-postgres.cjs
       - name: Dependency security
         run: npm audit --omit=dev --audit-level=high
+  public-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Public site and private route protection (GET only)
+        run: node scripts/check-public-site.cjs

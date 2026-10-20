@@ -1,6 +1,7 @@
 'use strict';
 /* MAHACH PostgreSQL (staging). Não substitua a versão SQLite original. */
 const http=require('node:http');
+const {clientIp}=require('./client-ip');
 const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
@@ -59,7 +60,7 @@ function checkOrigin(req){const o=req.headers.origin;const host=req.headers.host
 function canWrite(req,s){return checkOrigin(req)&&req.headers['x-csrf-token']===s.csrf}
 function cookieValue(req,value,maxAge=28800){const secure=(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)?'; Secure':'';return `mahach_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`}
 const counters=new Map();
-function rate(req,key,max,window=60000){const ip=req.socket.remoteAddress||'local',n=Date.now(),k=`${key}:${ip}`,v=counters.get(k)||{time:n,count:0};if(n-v.time>window){v.time=n;v.count=0}v.count++;counters.set(k,v);if(counters.size>4000)for(const [k,v]of counters)if(n-v.time>3600000)counters.delete(k);return v.count<=max}
+function rate(req,key,max,window=60000){const ip=clientIp(req),n=Date.now(),k=`${key}:${ip}`,v=counters.get(k)||{time:n,count:0};if(n-v.time>window){v.time=n;v.count=0}if(!counters.has(k)&&counters.size>=20000)return false;v.count++;counters.set(k,v);if(counters.size>4000)for(const [k,v]of counters)if(n-v.time>3600000)counters.delete(k);return v.count<=max}
 function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku,stock_confirmed:p.stock_confirmed===true,shipping_confirmed:p.shipping_confirmed===true}}
 const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.ttf':'font/ttf','.ico':'image/x-icon'};
 async function staticFile(req,res,url){
@@ -156,6 +157,11 @@ async function imageUpload(req){
 async function sendTransactional(orderId,kind){
  const o=(await db.prepare('SELECT * FROM orders WHERE id=?').get(orderId));if(!o)return {ok:false};
  const esc=commerce.htmlesc,customer=o.customer_email;
+ if(kind==='status'){
+  const labels={em_preparacao:'em preparação',embalado:'embalado',enviado:'enviado',pronto_retirada:'pronto para retirada',concluido:'entregue ou retirado',cancelado:'cancelado'};
+  if(!customer||!labels[o.status])return {customer:{ok:false,reason:'Sem atualização notificável'}};
+  return {customer:await commerce.sendEmail(conf,customer,'MAHACH: pedido '+labels[o.status]+' · '+o.id,'<h2>Pedido '+esc(o.id)+'</h2><p>Seu pedido está '+esc(labels[o.status])+'.</p><p>Pagamento: '+esc(o.payment_status)+'. Consulte o acompanhamento para mais informações.</p>')};
+ }
  const summary=`<h2>Pedido ${esc(o.id)} · MAHACH</h2><p>Olá, ${esc(o.customer_name)}.</p><p>Itens: ${JSON.parse(o.items_json).map(i=>esc(i.qty+'x '+i.name)).join(', ')}</p>`;
  const approved=kind==='approved',tracking=kind==='tracking';
  const total=(Number(o.subtotal)+Number(o.shipping_cost||0)).toFixed(2).replace('.',',');
@@ -164,8 +170,8 @@ async function sendTransactional(orderId,kind){
  const quickDelivery=['uber','99'].includes(o.delivery);
  const custHtml=summary+(tracking?`<p>Seu código de rastreio: <strong>${esc(o.tracking_code)}</strong></p>${trackingPage?`<p><a href="${esc(trackingPage)}">Acompanhar na transportadora</a></p>`:"<p>Consulte a loja para obter o link da transportadora.</p>"}`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe MAHACH.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':['correios','transportadora'].includes(o.delivery)?'<p>O código de rastreamento será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
  const result={};
- const flag=tracking?'tracking_email_sent':'customer_email_sent';
- if(customer&&!o[flag]){result.customer=await commerce.sendEmail(conf,customer,customerSubject,custHtml);if(result.customer.ok)(await db.prepare('UPDATE orders SET '+flag+'=1 WHERE id=?').run(orderId))}
+ const flag=tracking?'tracking_email_sent':approved?'customer_email_sent':null;
+ if(customer&&(!flag||!o[flag])){result.customer=await commerce.sendEmail(conf,customer,customerSubject,custHtml);if(flag&&result.customer.ok)(await db.prepare('UPDATE orders SET '+flag+'=1 WHERE id=?').run(orderId))}
  if(approved&&conf('ADMIN_EMAIL')&&!o.admin_email_sent){result.admin=await commerce.sendEmail(conf,conf('ADMIN_EMAIL'),'MAHACH: venda paga · '+o.id,summary+'<p>Pagamento verificado no Mercado Pago. Total: R$ '+total+'.</p>');if(result.admin.ok)(await db.prepare('UPDATE orders SET admin_email_sent=1 WHERE id=?').run(orderId))}
  return result;
 }
@@ -255,6 +261,13 @@ async function replayCheckout(res,identity){
 }
 
 async function api(req,res,u){const method=req.method, route=u.pathname;
+ if(route==='/sitemap.xml'&&method==='GET'){
+ const origin=commerce.httpsSite(conf('PUBLIC_SITE_URL'));if(!origin)return problem(res,503,'Configure a URL HTTPS principal da loja');
+ const pages=['/','/produtos/','/produtos/perfumaria-arabe/','/produtos/corpo-e-cuidado/','/produtos/beleza-essencial/'];
+ res.writeHead(200,{'Content-Type':'application/xml; charset=utf-8','Cache-Control':'public, max-age=3600'});
+ return res.end('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+pages.map(p=>'<url><loc>'+commerce.htmlesc(origin+p)+'</loc></url>').join('')+'</urlset>');
+ }
+ if(route==='/robots.txt'&&method==='GET'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end('User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nDisallow: /acompanhar.html\nDisallow: /finalizado.html\n')}
  if(route==='/api/health'&&method==='GET')return json(res,200,{ok:true,catalog:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n});
  if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:await checkoutAllowed(req),testMode:process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&process.env.MAHACH_ENABLE_CHECKOUT!=='true'},{'Cache-Control':'no-store'});
  if(route==='/api/meta'&&method==='GET'){
@@ -441,6 +454,10 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  const s=await logged(req,res);if(!s)return;
  if(method!=='GET'&&!canWrite(req,s))return problem(res,403,'Sessão ou CSRF inválido');
  if(method!=='GET'&&route!=='/api/admin/logout'&&process.env.MAHACH_ENABLE_ADMIN_WRITES!=='true')return problem(res,503,'Gravações desativadas nesta versão. Reinicie o teste com MAHACH_ENABLE_ADMIN_WRITES=true depois de confirmar o backup e o banco de testes.');
+ if(route==='/api/admin/launch-check'&&method==='GET'){
+ const catalog=await db.prepare("SELECT COUNT(*) total,COUNT(*) FILTER(WHERE active=1 AND stock_confirmed=true AND stock>0 AND price>0) with_confirmed_stock,COUNT(*) FILTER(WHERE active=1 AND shipping_confirmed=true AND weight>0 AND width>0 AND height>0 AND length>0) with_shipping,COUNT(*) FILTER(WHERE active=1 AND (sku IS NULL OR sku='')) without_sku FROM products").get();
+ return json(res,200,{catalog,paymentConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),requiresPaymentHomologation:true,notice:'Configuração presente não comprova cobrança, cotação ou entrega de e-mail reais.'});
+ }
  if(route==='/api/admin/capabilities'&&method==='GET')return json(res,200,{writes:process.env.MAHACH_ENABLE_ADMIN_WRITES==='true',checkout:process.env.MAHACH_ENABLE_CHECKOUT==='true',imageStorage:imageStorageStatus()});
 
  if(route==='/api/admin/settings'&&method==='GET')return json(res,200,{fields:settings.list(),notice:'Salvo no banco privado, refletido imediatamente no servidor. A edição do .env requer reiniciar o servidor; segredos ficam criptografados e não retornam ao navegador.'});
@@ -541,13 +558,14 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
  const orderEdit=route.match(/^\/api\/admin\/orders\/(MH-[A-Z0-9]+)$/);
  if(orderEdit&&method==='PUT'){
- const x=await body(req),status=str(x.status,40),tracking_code=str(x.tracking_code,100),tracking_url=secureUrl(str(x.tracking_url,1500));if(!['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','embalado','enviado','pronto_retirada','concluido','cancelado'].includes(status))return problem(res,400,'Status inválido');const old=(await db.prepare('SELECT delivery,payment,payment_status,tracking_code FROM orders WHERE id=?').get(orderEdit[1]));if(!old)return problem(res,404,'Pedido não encontrado');
+ const x=await body(req),status=str(x.status,40),tracking_code=str(x.tracking_code,100),tracking_url=secureUrl(str(x.tracking_url,1500));if(!['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','embalado','enviado','pronto_retirada','concluido','cancelado'].includes(status))return problem(res,400,'Status inválido');const old=(await db.prepare('SELECT delivery,payment,payment_status,tracking_code,status FROM orders WHERE id=?').get(orderEdit[1]));if(!old)return problem(res,404,'Pedido não encontrado');
  if(['pix','card'].includes(old.payment)&&['pagamento_aprovado','em_preparacao','embalado','enviado','pronto_retirada','concluido'].includes(status)&&old.payment_status!=='aprovado')return problem(res,409,'Pagamento online deve ser aprovado pelo Mercado Pago, nunca manualmente');
  if(status==='enviado'&&['correios','transportadora'].includes(old.delivery)&&(!tracking_code||!tracking_url))return problem(res,400,'Informe código e link HTTPS da transportadora antes de marcar como enviado');
  const changed=old.tracking_code!==tracking_code;
  (await db.prepare("UPDATE orders SET status=?,tracking_code=?,tracking_url=?,payment_status=CASE WHEN ?='pagamento_aprovado' AND payment='cash' THEN 'aprovado' ELSE payment_status END,tracking_email_sent=CASE WHEN tracking_code<>? THEN 0 ELSE tracking_email_sent END WHERE id=?").run(status,tracking_code,tracking_url,status,tracking_code,orderEdit[1]));
  const mail=['correios','transportadora'].includes(old.delivery)&&tracking_code&&changed&&['enviado','concluido'].includes(status)?await sendTransactional(orderEdit[1],'tracking'):{};
- return json(res,200,{ok:true,email:mail});
+ let statusEmail={};if(old.status!==status)try{statusEmail=await sendTransactional(orderEdit[1],status==='pagamento_aprovado'?'approved':'status')}catch{statusEmail={customer:{ok:false,reason:'Notificação pendente'}}}
+ return json(res,200,{ok:true,email:mail,statusEmail});
  }
  if(route==='/api/admin/bling/preview'&&method==='GET'){
  const skuById=new Map((await db.prepare('SELECT id,sku FROM products').all()).map(p=>[p.id,p.sku]));
@@ -564,7 +582,9 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
 const server=http.createServer({requestTimeout:30000,headersTimeout:15000,maxHeaderSize:16384},async(req,res)=>{
  security(res);
  if(!rate(req,'general',800,60000))return problem(res,429,'Limite de requisições');
- try{await ready;const u=new URL(req.url,'http://localhost');if(u.pathname.startsWith('/api/'))await api(req,res,u);else if(['GET','HEAD'].includes(req.method))await staticFile(req,res,u);else problem(res,405,'Método não permitido')}catch(e){if(process.env.NODE_ENV!=='production'&&!e.status)console.error(e);problem(res,e.code==='23505'?409:e.status||500,e.code==='23505'?'SKU ou identificador já utilizado':e.status?e.message:'Erro interno. Tente novamente.')}
+ try{await ready;const u=new URL(req.url,'http://localhost');if(u.pathname.startsWith('/api/')||u.pathname==='/robots.txt'||u.pathname==='/sitemap.xml')await api(req,res,u);else if(['GET','HEAD'].includes(req.method))await staticFile(req,res,u);else problem(res,405,'Método não permitido')}catch(e){if(process.env.NODE_ENV!=='production'&&!e.status)console.error(e);problem(res,e.code==='23505'?409:e.status||500,e.code==='23505'?'SKU ou identificador já utilizado':e.status?e.message:'Erro interno. Tente novamente.')}
 });
-if(require.main===module){ready.then(()=>server.listen(Number(process.env.PORT)||3000,process.env.HOST||'0.0.0.0',()=>console.log('MAHACH PostgreSQL iniciado na porta '+(process.env.PORT||3000)))).catch(e=>{console.error('Falha na inicialização PostgreSQL:',e.message);process.exitCode=1;db.close().catch(()=>{})})}
+if(require.main===module){
+ process.once('SIGTERM',()=>{server.close(()=>db.close().catch(()=>{}));setTimeout(()=>{server.closeAllConnections();db.close().catch(()=>{})},25000).unref()});
+ ready.then(()=>server.listen(Number(process.env.PORT)||3000,process.env.HOST||'0.0.0.0',()=>console.log('MAHACH PostgreSQL iniciado na porta '+(process.env.PORT||3000)))).catch(e=>{console.error('Falha na inicialização PostgreSQL:',e.message);process.exitCode=1;db.close().catch(()=>{})})}
 module.exports={server,db,ready,searchText};

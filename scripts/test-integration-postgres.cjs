@@ -107,6 +107,19 @@ async function main(){
  for(const path of ['/private/settings.key','/server.js','/.env','/planilha-original.csv','/assets/../server.js'])assert.equal((await fetch(base+path)).status,404);
  for(const path of ['/','/produtos/','/acompanhar.html','/finalizado.html']){r=await fetch(base+path);assert.equal(r.status,200);assert.ok(r.headers.get('content-security-policy'));assert.equal(r.headers.get('x-content-type-options'),'nosniff')}
  r=await fetch(base+'/api/products?page=1.8&limit=2.7');assert.equal(r.status,200);assert.equal((await r.json()).page,1);
+ 
+ const loadSamples=[];
+ for(const concurrency of [1,5,10]){
+  const durations=[];let errors=0,issued=0;const started=performance.now();
+  await Promise.all(Array.from({length:concurrency},async()=>{
+   while(issued<30){issued++;const before=performance.now();const r=await fetch(base+'/api/health');if(!r.ok)errors++;await r.arrayBuffer();durations.push(performance.now()-before)}
+  }));
+  durations.sort((a,b)=>a-b);
+  loadSamples.push({concurrency,requests:durations.length,errors,p95ms:Math.round(durations[Math.ceil(durations.length*.95)-1]),durationMs:Math.round(performance.now()-started)});
+ }
+ console.log('LOCAL DISPOSABLE HEALTH LOAD (not production capacity): '+JSON.stringify(loadSamples));
+ assert.ok(loadSamples.every(x=>x.errors===0));
+
  console.log('POSTGRES OK: migration, real transactions, duplicate checkout, stock reservation, signed webhook concurrency, stale shipping quotes, private files. Providers are simulated; no production access.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{global.fetch=realFetch;Module._load=originalLoad;if(app){await new Promise(r=>app.server.close(r));await app.db.close()}await raw.end()});

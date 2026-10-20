@@ -1,0 +1,62 @@
+# MAHACH — preparação de lançamento (20/10/2026)
+
+Cadastro dos produtos: manual pelo proprietário. A pesquisa dos 500 deixou de fazer parte da execução solicitada.
+
+## Entrega preparada
+Branch: codex/preparacao-lancamento. PR: https://github.com/passosjackson025-lang/mahach-loja/pull/1
+Produção permanece no commit 9494a87c0a59fa95ec7d1c3d5198a0a14895ec50 (V8), verificado durante esta sessão. Nenhum deploy ou alteração de dados de produção realizado.
+
+- Estoque físico e medidas de transporte exigem confirmação explícita no painel. O estoque legado 1000 não recebe confirmação automática.
+- Produtos inativos pesquisáveis por nome, marca, SKU ou ID; edição preserva ID; SKU gerado quando vazio; índice único.
+- Reserva de estoque em transação antes da chamada de pagamento. Repetição do checkout com a mesma chave recupera o mesmo pedido. Pix usa a mesma chave de idempotência por pedido.
+- Reserva é consumida na aprovação, sem nova baixa; cancelamento confirmado pelo provedor libera uma reserva pendente uma única vez. Estornos de compras já aprovadas não repõem estoque automaticamente.
+- Checkout de cartão em URL validada do Mercado Pago; recuperação da preferência existente. Os dados do cartão não passam pela loja.
+- Webhook HMAC, consulta ao provedor, conferência de valor, moeda, método e pedido. Novas compras podem ficar suspensas sem interromper notificações de pagamentos iniciados.
+- Estados pendente, em análise, recusado, cancelado, aprovado, reembolsado e contestação. Eventos pendentes atrasados não desfazem aprovação.
+- E-mail só é marcado como enviado com resposta contendo ID do provedor. Chave de idempotência reduz duplicação por retry; aprovação, preparação, embalagem, envio e conclusão têm notificações.
+- Rastreamento por transportadora e link HTTPS cadastrado. Impede preparo/expedição de pedido online sem pagamento aprovado.
+- Frete mantém Melhor Envio e restrições atuais de perfumes. Preço, itens e dimensões fazem parte da validação da cotação. Nenhuma cotação fictícia.
+- Scrypt assíncrono no login, limites de tempo/tamanho HTTP, paginação inteira, arquivos privados bloqueados.
+- robots.txt e sitemap.xml preparados para a URL principal configurada; nenhum domínio novo definido.
+
+## Evidência de testes
+A rodada no commit 3097a8f318808af7e7d356e187d277cf6886a613 passou nos testes unitários, testes legados, PostgreSQL 18 descartável, Chromium desktop (1440px) e mobile (390px), e npm audit sem vulnerabilidades reportadas.
+Rodadas seguintes devem passar novamente antes de publicar.
+O PostgreSQL de testes usa dados sintéticos locais. Mercado Pago, Melhor Envio, Resend e Cloudinary são simulados nos testes. NÃO é homologação real dos provedores.
+Cobertura: checkout repetido simultâneo, reserva de estoque, webhook simultâneo/duplicado/assinado, valor divergente, eventos atrasados, cotação invalidada por mudança de preço, arquivos privados, modal, sacola e Pix renderizado.
+O teste progressivo usa somente /api/health no ambiente descartável; os números NÃO representam capacidade do serviço Free em produção.
+Verificação pública usa apenas GET; não cria pedidos nem cobra valores.
+
+## Bloqueios de lançamento
+1. MP_HTTP_401_7 ocorreu em produção após V8. Normalização de Bearer não comprova que a causa real foi resolvida. Precisamos de credencial apropriada à integração/ambiente, permissão de pagamentos e homologação real na conta. Consulta /users/me não comprova permissão de cobrança.
+2. Estoque real, preço, SKU e embalagem de cada produto precisam de revisão manual. Imagens serão cadastradas pelo proprietário.
+3. E-mail: MAIL_FROM e ADMIN_EMAIL estavam vazios no banco consultado. Confirmar Resend, domínio/remetente e recebimento real.
+4. Frete: falta cotação real com uma sacola e embalagem confirmadas; restrições de perfumes e cobertura dependem do serviço.
+5. Render usa Free (hiberna). Upgrade de compute requer orçamento/aprovação; nenhum plano alterado. Limitação por IP atrás do proxy e armazenamento distribuído de cotações/rate limit ainda precisam de validação antes de escalar para múltiplas instâncias.
+6. Nenhum snapshot nem agendamento de snapshot estava configurado no Neon. Snapshot é cobrado conforme tabela do provedor; não criado sem aprovação de cobrança.
+7. Migração foi preparada/testada em banco descartável, mas ainda não aplicada no Neon.
+
+## Aplicação proposta (exige aprovação de produção)
+1. Manter MAHACH_ENABLE_CHECKOUT=false; confirmar publicamente checkoutEnabled=false. Manter modo de homologação acessível apenas ao administrador quando necessário.
+2. Criar backup verificável do Neon. Se usar snapshot, obter aprovação de custo primeiro. Restaurar em branch isolada e verificar contagens, configurações e pedidos; não restaurar sobre produção.
+3. Executar migrations/20261020-sale-validation.sql. Somente adiciona três flags booleanas e índice de SKU. Flags antigas começam falsas; não muda saldo, IDs, preço ou visibilidade. A criação do índice falha se houver SKU duplicado, revertendo a transação.
+4. Publicar exatamente o commit testado pela PR, confirmando main atual e preservando alterações alheias. Main publica automaticamente na Render.
+5. Conferir deploy, health, catálogo, acesso privado, painel e checkout público desativado. Conferir logs sem imprimir segredos.
+6. Cadastrar/confirmar manualmente produtos prontos. Produtos sem estoque confirmado não podem vender; transporte exige confirmação de medidas.
+7. Homologar Pix e cartão com credenciais corretas, webhook real e recebimento de e-mail; testar frete real. Cobranças reais e liberação pública exigem aprovação separada.
+8. Só abrir vendas depois do aceite da homologação.
+
+## Reversão
+Com checkout ainda bloqueado e antes de novas compras: retornar o deploy ao V8, mantendo as colunas novas (mudança aditiva). Não apagar colunas, índices, produtos ou pedidos automaticamente.
+Se houver pedidos com reservas ou pagamentos, não retornar ao V8 sem reconciliação: V8 baixa estoque em outro momento. Suspender novas compras, preservar webhooks, conferir pagamentos no provedor e tratar reservas individualmente.
+Restaurar snapshot sobre produção só com aprovação explícita e plano de preservação dos pedidos posteriores ao snapshot. Não é reversão automática segura após vendas.
+
+## Domínio futuro
+Após a compra: confirmar nome exato, cadastrar domínio na Render, aplicar os registros DNS retornados, verificar TLS, escolher URL principal e redirecionamentos; atualizar PUBLIC_SITE_URL e URLs de retorno/webhook do Mercado Pago. Verificar remetente de e-mail e registros DNS informados pelo provedor (SPF/DKIM/DMARC). Conferir sitemap e robots no domínio final.
+Não modificar URLs atuais antes dessa escolha.
+
+## Operação
+Reservas de pagamentos sem confirmação não devem ser liberadas manualmente enquanto o provedor ainda puder aprovar a cobrança.
+Cancelamento de pedido no painel não cancela nem reembolsa uma cobrança no Mercado Pago. Verificar o provedor antes de reconciliar estoque.
+O checkout de cartão reaproveita a preferência persistida. Uma falha de rede após o provedor criar a preferência e antes da persistência exige conciliação; não há afirmação de exatamente uma cobrança em todo cenário.
+Nenhuma declaração de segurança absoluta, disponibilidade absoluta ou 100% funcionalidade foi feita.

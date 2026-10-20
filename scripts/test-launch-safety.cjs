@@ -1,12 +1,17 @@
 'use strict';
 const assert=require('node:assert/strict');
 const mp=require('../commerce-flows');
+const {clientIp}=require('../client-ip');
 const values={MERCADO_PAGO_ACCESS_TOKEN:' Bearer fake-token ',MERCADO_PAGO_WEBHOOK_SECRET:'fake-secret',PUBLIC_SITE_URL:'https://shop.invalid',RESEND_API_KEY:'fake-email',MAIL_FROM:'MAHACH <mail@shop.invalid>'};
 const conf=k=>values[k]||'';
 async function main(){
  const original=global.fetch;let requests=0;
  try{
   assert.equal(mp.accessToken(conf),'fake-token');
+  const forwarded={headers:{'cf-connecting-ip':'203.0.113.10','x-forwarded-for':'192.0.2.99'},socket:{remoteAddress:'127.0.0.1'}};
+  assert.equal(clientIp(forwarded,{}),'127.0.0.1','Local requests cannot forge their client IP');
+  assert.equal(clientIp(forwarded,{RENDER_SERVICE_ID:'fake-render'}),'203.0.113.10');
+  assert.equal(clientIp({headers:{'cf-connecting-ip':'invalid'},socket:forwarded.socket},{RENDER_SERVICE_ID:'fake-render'}),'127.0.0.1');
   assert.ok(mp.paymentUrl('https://www.mercadopago.com.br/checkout/v1/redirect?x=1'));
   for(const u of ['https://evil.invalid','https://mercadopago.com.br.evil.invalid','https://user:pass@mercadopago.com.br','javascript:alert(1)'])assert.equal(mp.paymentUrl(u),null);
   global.fetch=async()=>({ok:true,status:200,json:async()=>({})});
