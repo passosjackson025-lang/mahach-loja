@@ -1,0 +1,47 @@
+name: MAHACH checks
+on:
+  push:
+    branches: [codex/preparacao-lancamento]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: mahach-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Syntax
+        run: |
+          node --check server.js
+          node --check commerce-flows.js
+          node --check checkout.js
+          node --check tracking.js
+          node --check admin/admin.js
+      - name: Security and provider boundaries (no real integrations)
+        run: node scripts/test-launch-safety.cjs
+      - name: Catalog and private checkout
+        run: node scripts/test-offline.cjs
+      - name: Admin, CSRF and photo
+        run: node scripts/test-admin-photo.cjs
+      - name: Cloud storage contract (mock)
+        run: node scripts/test-cloud-storage.cjs
+      - name: Customers, orders and signed webhook (mock)
+        run: node scripts/test-loja-clientes.cjs
+      - name: Pix request and idempotency (mock)
+        run: node scripts/test-pix-checkout.cjs
+      - name: Public page structure
+        run: node scripts/testar-publicacao.cjs
+      - name: Dependency security
+        run: npm audit --omit=dev --audit-level=high

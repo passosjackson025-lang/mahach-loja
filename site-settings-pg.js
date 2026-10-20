@@ -22,7 +22,7 @@ async function makeSettingsPg(db,keyFile){
  }
  await reload();
  function get(name){
-  if(!FIELDS[name])throw Error('Configuração não suportada');
+  if(!Object.hasOwn(FIELDS,name))throw Error('Configuração não suportada');
   const row=stored.get(name);
   return row?(row.encrypted?unseal(key(false),row.value):row.value):String(process.env[name]||'');
  }
@@ -33,10 +33,10 @@ async function makeSettingsPg(db,keyFile){
  })}
  async function save(changes,clears=[]){
   if(!changes||typeof changes!=='object'||Array.isArray(changes)||!Array.isArray(clears))throw Object.assign(Error('Dados inválidos'),{status:400});
-  if(Object.keys(changes).length>FIELDS.length||clears.length>FIELDS.length)throw Object.assign(Error('Muitos campos'),{status:400});
+  if(Object.keys(changes).length>Object.keys(FIELDS).length||clears.length>Object.keys(FIELDS).length)throw Object.assign(Error('Muitos campos'),{status:400});
   const updates=[];
   for(const [name,raw] of Object.entries(changes)){
-   const def=FIELDS[name];if(!def||typeof raw!=='string')throw Object.assign(Error('Campo inválido: '+name),{status:400});
+   const def=Object.hasOwn(FIELDS,name)?FIELDS[name]:null;if(!def||typeof raw!=='string')throw Object.assign(Error('Campo inválido: '+name),{status:400});
    const value=raw.trim();if(value.length>(def.max||1500))throw Object.assign(Error('Valor muito longo: '+name),{status:400});
    if(def.kind==='secret'&&!value)continue;
    if(def.kind==='cep'&&value&&!/^\d{8}$/.test(value.replace(/\D/g,'')))throw Object.assign(Error('CEP deve ter oito dígitos'),{status:400});

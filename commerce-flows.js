@@ -3,7 +3,9 @@ const crypto=require('node:crypto');
 const MP='https://api.mercadopago.com';
 const cents=x=>Math.round(Number(x)*100);
 function httpsSite(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!['localhost','127.0.0.1'].includes(u.hostname)&&!u.search&&!u.hash?u.origin:null}catch{return null}}
-function configured(conf){return !!(conf('MERCADO_PAGO_ACCESS_TOKEN')&&conf('MERCADO_PAGO_WEBHOOK_SECRET')&&httpsSite(conf('PUBLIC_SITE_URL')))}
+function accessToken(conf){return String(conf('MERCADO_PAGO_ACCESS_TOKEN')||'').trim().replace(/^Bearer\s+/i,'')}
+function paymentUrl(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&/(^|\.)mercadopago\.com(\.br)?$/.test(u.hostname)?u.href:null}catch{return null}}
+function configured(conf){return !!(accessToken(conf)&&conf('MERCADO_PAGO_WEBHOOK_SECRET')&&httpsSite(conf('PUBLIC_SITE_URL')))}
 function htmlesc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function createPreference(conf,order,items,token){
  if(!configured(conf))throw Object.assign(new Error('Mercado Pago indisponível: configure Access Token, URL HTTPS e segredo do Webhook no painel.'),{status:503});
@@ -12,9 +14,9 @@ async function createPreference(conf,order,items,token){
  const lineItems=items.map(i=>({id:i.id,title:i.name.slice(0,100),quantity:i.qty,unit_price:Number(i.unit_price),currency_id:'BRL'}));
  if(order.shipping_cost>0)lineItems.push({id:'frete',title:'Frete via transportadora',quantity:1,unit_price:Number(order.shipping_cost),currency_id:'BRL'});
  const body={items:lineItems,external_reference:order.id,payer:{name:order.customer_name,email:order.customer_email},back_urls:{success:back,pending:back,failure:back},auto_return:'approved',notification_url:origin+'/api/payments/mercadopago/webhook',statement_descriptor:'MAHACH',payment_methods:{excluded_payment_types:(order.payment==='pix'?['credit_card','debit_card','ticket','prepaid_card']:['bank_transfer','ticket','atm','prepaid_card','debit_card']).map(id=>({id}))}};
- const res=await fetch(MP+'/checkout/preferences',{method:'POST',headers:{Authorization:'Bearer '+conf('MERCADO_PAGO_ACCESS_TOKEN'),'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(18000)});
- const response=await res.json().catch(()=>({}));if(!res.ok||!/^https:\/\//.test(response.init_point||''))throw Object.assign(new Error('Mercado Pago não conseguiu iniciar o checkout (HTTP '+res.status+').'),{status:502});
- return {preferenceId:String(response.id||''),checkoutUrl:response.init_point};
+ const res=await fetch(MP+'/checkout/preferences',{method:'POST',headers:{Authorization:'Bearer '+accessToken(conf),'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(18000)});
+ const response=await res.json().catch(()=>({}));if(!res.ok||!paymentUrl(response.init_point))throw Object.assign(new Error('Mercado Pago não conseguiu iniciar o checkout (HTTP '+res.status+').'),{status:502});
+ return {preferenceId:String(response.id||''),checkoutUrl:paymentUrl(response.init_point)};
 }
 // Dados usados somente na chamada ao Mercado Pago; nao persistimos CPF na MAHACH.
 function validCPF(value){
@@ -44,7 +46,7 @@ async function createPixPayment(conf,order,cpf){
  // Mesma chave em cada tentativa do MESMO pedido: um pedido nunca gera 2 Pix.
  const key=crypto.createHash('sha256').update('MAHACH-PIX:'+order.id).digest('hex');
  const res=await fetch(MP+'/v1/payments',{method:'POST',headers:{
-  Authorization:'Bearer '+conf('MERCADO_PAGO_ACCESS_TOKEN'),
+  Authorization:'Bearer '+accessToken(conf),
   'Content-Type':'application/json','Accept':'application/json','X-Idempotency-Key':key
  },body:JSON.stringify(body),signal:AbortSignal.timeout(18000)});
  const data=await res.json().catch(()=>({}));
@@ -69,12 +71,15 @@ function verifyMPWebhook(conf,req,url){
  return dataId;
 }
 async function getVerifiedPayment(conf,id){
- const r=await fetch(MP+'/v1/payments/'+id,{headers:{Authorization:'Bearer '+conf('MERCADO_PAGO_ACCESS_TOKEN'),'Accept':'application/json'},signal:AbortSignal.timeout(15000)});
+ const r=await fetch(MP+'/v1/payments/'+id,{headers:{Authorization:'Bearer '+accessToken(conf),'Accept':'application/json'},signal:AbortSignal.timeout(15000)});
  if(!r.ok)throw Object.assign(new Error('Falha ao consultar pagamento no Mercado Pago'),{status:502});return r.json();
 }
 async function sendEmail(conf,to,subject,html){
  const api=conf('RESEND_API_KEY'),from=conf('MAIL_FROM');if(!api||!from)return {ok:false,reason:'Serviço de e-mail não configurado'};
  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+api,'Content-Type':'application/json'},body:JSON.stringify({from,to:[to],subject,html}),signal:AbortSignal.timeout(12000)});
- if(!r.ok)return {ok:false,reason:'Serviço de e-mail respondeu HTTP '+r.status};return {ok:true};
+ if(!r.ok)return {ok:false,reason:'Serviço de e-mail respondeu HTTP '+r.status};
+ const result=await r.json().catch(()=>null);
+ if(!result||typeof result.id!=='string'||!result.id)return {ok:false,reason:'Provedor não confirmou o identificador da mensagem'};
+ return {ok:true,providerId:result.id};
 }
-module.exports={cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};
+module.exports={accessToken,paymentUrl,cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};

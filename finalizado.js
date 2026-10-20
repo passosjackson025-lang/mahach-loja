@@ -13,6 +13,8 @@
    const q=new URLSearchParams({reference,token}),res=await fetch('/api/payments/status?'+q,{cache:'no-store'}),data=await res.json();
    if(!res.ok)throw Error('Pedido não encontrado');
    const approved=data.paymentStatus==='aprovado';
+   const terminal={recusado:'Pagamento recusado. Consulte a loja antes de tentar novamente.',cancelado:'Pagamento cancelado. Nenhuma aprovação foi confirmada.',reembolsado:'Pagamento reembolsado. Consulte o acompanhamento.',contestacao:'Pagamento em contestação. Entre em contato com a loja.'};
+   if(terminal[data.paymentStatus]){message.textContent=terminal[data.paymentStatus];return;}
    message.textContent=approved?'Pagamento confirmado. Seu pedido está registrado e será preparado pela loja.':
     'Pedido registrado. Aguardando confirmação segura do Mercado Pago. Não faça um novo pagamento sem consultar o pedido.';
    if(approved&&data.whatsapp&&data.whatsapp.startsWith('https://wa.me/')){wa.href=data.whatsapp;wa.hidden=false}

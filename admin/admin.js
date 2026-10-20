@@ -55,7 +55,7 @@ async function listOrders(){
   info.append(elem('strong',o.id+' · '+o.customer_name),elem('small',new Date(o.created).toLocaleString('pt-BR')+' · '+o.phone),elem('small',o.items.map(x=>x.qty+'x '+x.name).join(', ')),elem('small','R$ '+Number(o.subtotal).toFixed(2)+' · '+o.delivery+' · '+o.payment),elem('small',o.address||'Retirada na loja'));
   info.append(elem('small','Pagamento: '+(o.payment_status||'pendente')));
   const sel=elem('select');
-  for(const status of ['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','enviado','pronto_retirada','concluido','cancelado']){
+  for(const status of ['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','embalado','enviado','pronto_retirada','concluido','cancelado']){
    const opt=elem('option',status.replaceAll('_',' '));opt.value=status;opt.selected=o.status===status;sel.append(opt);
   }
   const code=elem('input');code.value=o.tracking_code||'';code.placeholder='Código de rastreio';

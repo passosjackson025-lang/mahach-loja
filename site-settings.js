@@ -34,12 +34,12 @@ function getKey(dbPath){
 function seal(key,value){const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',key,iv);const bytes=Buffer.concat([cipher.update(value,'utf8'),cipher.final()]);return Buffer.concat([iv,cipher.getAuthTag(),bytes]).toString('base64')}
 function unseal(key,value){const bytes=Buffer.from(value,'base64'),dec=crypto.createDecipheriv('aes-256-gcm',key,bytes.subarray(0,12));dec.setAuthTag(bytes.subarray(12,28));return Buffer.concat([dec.update(bytes.subarray(28)),dec.final()]).toString('utf8')}
 function makeSettings(db,dbPath){init(db);let cachedKey;
- function get(name){if(!FIELDS[name])throw Error('Configuração não suportada');const row=db.prepare('SELECT value,encrypted FROM site_settings WHERE key=?').get(name);if(row){if(row.encrypted){cachedKey??=getKey(dbPath);return unseal(cachedKey,row.value)}return row.value}return String(process.env[name]||'')}
+ function get(name){if(!Object.hasOwn(FIELDS,name))throw Error('Configuração não suportada');const row=db.prepare('SELECT value,encrypted FROM site_settings WHERE key=?').get(name);if(row){if(row.encrypted){cachedKey??=getKey(dbPath);return unseal(cachedKey,row.value)}return row.value}return String(process.env[name]||'')}
  function list(){return Object.entries(FIELDS).map(([key,meta])=>{const row=db.prepare('SELECT updated_at FROM site_settings WHERE key=?').get(key),value=get(key);return {key,label:meta.label,kind:meta.kind,section:meta.section,configured:!!value,source:row?'painel':process.env[key]?'ambiente':'vazio',value:meta.kind==='secret'?'':value,updatedAt:row?.updated_at||null}})}
  function save(changes,clears=[]){if(!changes||typeof changes!=='object'||Array.isArray(changes)||!Array.isArray(clears))throw Object.assign(new Error('Dados inválidos'),{status:400});
- if(Object.keys(changes).length>FIELDS.length||clears.length>FIELDS.length)throw Object.assign(new Error('Muitos campos'),{status:400});
+ if(Object.keys(changes).length>Object.keys(FIELDS).length||clears.length>Object.keys(FIELDS).length)throw Object.assign(new Error('Muitos campos'),{status:400});
  const upd=[];for(const [name,raw]of Object.entries(changes)){
-  const def=FIELDS[name];if(!def||typeof raw!=='string')throw Object.assign(new Error('Campo inválido: '+name),{status:400});const value=raw.trim(),max=def.max||1500;
+  const def=Object.hasOwn(FIELDS,name)?FIELDS[name]:null;if(!def||typeof raw!=='string')throw Object.assign(new Error('Campo inválido: '+name),{status:400});const value=raw.trim(),max=def.max||1500;
   if(value.length>max)throw Object.assign(new Error('Valor muito longo: '+name),{status:400});
   if(def.kind==='secret'&&!value)continue; // Campo vazio não apaga credencial.
   if(def.kind==='cep'&&value&&!/^\d{8}$/.test(value.replace(/\D/g,'')))throw Object.assign(new Error('CEP deve ter oito dígitos'),{status:400});

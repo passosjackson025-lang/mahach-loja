@@ -246,6 +246,10 @@
    if(!response.ok)return;
    const data=await response.json();
    if(data.paymentStatus==='aprovado')showPaymentConfirmed();
+   else if(['recusado','cancelado','reembolsado','contestacao'].includes(data.paymentStatus)){
+    clearInterval(pixPoll);q('pixStatus').textContent='Pagamento '+data.paymentStatus+'. Consulte o acompanhamento ou entre em contato com a loja antes de pagar novamente.';
+    q('pixCopyButton').disabled=true;q('pixRetryButton').hidden=true;q('pixQrImage').hidden=true;
+   }
   }catch{} // O webhook e a consulta segura ao servidor confirmam o pagamento.
  }
  function startPixPolling(){if(pixPoll)clearInterval(pixPoll);pollPix();pixPoll=setInterval(pollPix,6500)}

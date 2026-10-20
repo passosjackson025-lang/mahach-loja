@@ -4,6 +4,7 @@ const http=require('node:http');
 const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
+const scrypt=require('node:util').promisify(crypto.scrypt);
 const {db,bootstrap}=require('./pg-db');
 const {importIntoPg,cleanCategory}=require('./csv-import-pg');
 const {makeSettingsPg}=require('./site-settings-pg');
@@ -99,9 +100,9 @@ async function syncVendizap(){let updates=0,images=0;
  return {synced:updates,images};
 }
 const liveQuotes=new Map();
-function itemsFingerprint(items,cep){return hash(cep+JSON.stringify(items.map(x=>[x.p.id,x.qty]).sort((a,b)=>a[0].localeCompare(b[0]))))}
+function itemsFingerprint(items,cep){return hash(cep+JSON.stringify(items.map(x=>[x.p.id,x.qty,x.p.price,x.p.weight,x.p.width,x.p.height,x.p.length]).sort((a,b)=>a[0].localeCompare(b[0]))))}
 async function shippingQuote(payload){
- const token=conf('MELHOR_ENVIO_TOKEN'),origin=conf('ORIGIN_CEP').replace(/\D/g,'');if(!token||origin.length!==8)throw Object.assign(new Error('Cotação indisponível até configurar token e CEP de origem'),{status:503});
+ const token=String(conf('MELHOR_ENVIO_TOKEN')||'').trim().replace(/^Bearer\s+/i,''),origin=conf('ORIGIN_CEP').replace(/\D/g,'');if(!token||origin.length!==8)throw Object.assign(new Error('Cotação indisponível até configurar token e CEP de origem'),{status:503});
  const cep=str(payload.cep,12).replace(/\D/g,'');if(cep.length!==8)throw Object.assign(new Error('CEP inválido'),{status:400});
  const items=await collectItems(payload.items);
  if(!items.length)throw Object.assign(new Error('Sacola vazia'),{status:400});
@@ -130,7 +131,7 @@ async function shippingQuote(payload){
   .map(x=>({service:String(x.name||'Entrega'),carrier:/^jet$/i.test(String(x.company?.name||''))?'J&T Express':String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
   .filter(x=>Number.isFinite(x.cost)&&x.cost>=0&&Number.isFinite(x.days)&&x.days>=0);
 }
-async function collectItems(items){if(!Array.isArray(items)||items.length>30)throw Object.assign(new Error('Sacola inválida'),{status:400});const ids=new Set(),out=[];for(const it of items){const id=str(it.id,80),qty=Number(it.qty);if(!id||ids.has(id)||!Number.isInteger(qty)||qty<1||qty>20)throw Object.assign(new Error('Quantidade inválida'),{status:400});ids.add(id);const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(id));if(!p)throw Object.assign(new Error('Produto indisponível'),{status:400});if(p.stock!==null&&p.stock<qty)throw Object.assign(new Error('Quantidade indisponível: '+p.name),{status:400});out.push({p,qty})}return out}
+async function collectItems(items){if(!Array.isArray(items)||items.length>30)throw Object.assign(new Error('Sacola inválida'),{status:400});const ids=new Set(),out=[];for(const it of items){const id=str(it.id,80),qty=Number(it.qty);if(!id||ids.has(id)||!Number.isInteger(qty)||qty<1||qty>20)throw Object.assign(new Error('Quantidade inválida'),{status:400});ids.add(id);const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(id));if(!p)throw Object.assign(new Error('Produto indisponível'),{status:400});if(!Number.isFinite(Number(p.price))||Number(p.price)<=0)throw Object.assign(new Error('Produto sem preço válido'),{status:400});if(p.stock===null||p.stock===undefined||!Number.isInteger(Number(p.stock))||Number(p.stock)<qty)throw Object.assign(new Error('Quantidade indisponível: '+p.name),{status:400});out.push({p,qty})}return out}
 
 // Upload de imagens WEBP: cliente normaliza foto no Canvas. Servidor valida assinatura,
 // dimensões 1200 x 1200 e grava nome aleatório, sem sobrescrever outros arquivos.
@@ -155,10 +156,10 @@ async function sendTransactional(orderId,kind){
  const summary=`<h2>Pedido ${esc(o.id)} · MAHACH</h2><p>Olá, ${esc(o.customer_name)}.</p><p>Itens: ${JSON.parse(o.items_json).map(i=>esc(i.qty+'x '+i.name)).join(', ')}</p>`;
  const approved=kind==='approved',tracking=kind==='tracking';
  const total=(Number(o.subtotal)+Number(o.shipping_cost||0)).toFixed(2).replace('.',',');
- const trackingPage='https://rastreamento.correios.com.br/app/index.php';
+ const trackingPage=secureUrl(o.tracking_url)||(o.shipping_service?.toLowerCase().includes('correios')?'https://rastreamento.correios.com.br/app/index.php':'');
  const customerSubject=approved?'MAHACH: pagamento aprovado · '+o.id:tracking?'MAHACH: seu código de rastreio · '+o.id:'MAHACH: pedido registrado · '+o.id;
  const quickDelivery=['uber','99'].includes(o.delivery);
- const custHtml=summary+(tracking?`<p>Seu código dos Correios: <strong>${esc(o.tracking_code)}</strong></p><p>Consulte diretamente em <a href="${trackingPage}">Rastreamento Correios</a>.</p>`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe MAHACH.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':o.delivery==='correios'?'<p>O código de rastreamento dos Correios será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
+ const custHtml=summary+(tracking?`<p>Seu código de rastreio: <strong>${esc(o.tracking_code)}</strong></p>${trackingPage?`<p><a href="${esc(trackingPage)}">Acompanhar na transportadora</a></p>`:"<p>Consulte a loja para obter o link da transportadora.</p>"}`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe MAHACH.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':['correios','transportadora'].includes(o.delivery)?'<p>O código de rastreamento será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
  const result={};
  const flag=tracking?'tracking_email_sent':'customer_email_sent';
  if(customer&&!o[flag]){result.customer=await commerce.sendEmail(conf,customer,customerSubject,custHtml);if(result.customer.ok)(await db.prepare('UPDATE orders SET '+flag+'=1 WHERE id=?').run(orderId))}
@@ -172,11 +173,22 @@ async function processVerifiedPayment(paymentId){
  const expected=commerce.cents(Number(o.subtotal)+Number(o.shipping_cost||0));
  if(pay.currency_id!=='BRL'||commerce.cents(pay.transaction_amount)!==expected)return {ignored:true,reason:'Valor divergente'};
  if(o.payment==='pix'&&pay.payment_method_id!=='pix')return {ignored:true,reason:'Metodo divergente'};
- if(o.payment==='pix'&&o.mp_payment_id&&o.mp_payment_id!==String(pay.id))return {ignored:true,reason:'Pagamento divergente'};
- if(pay.status!=='approved')return {approved:false};
+ if(o.mp_payment_id&&o.mp_payment_id!==String(pay.id))return {ignored:true,reason:'Pagamento divergente'};
+ if(o.payment==='card'&&pay.payment_type_id!=='credit_card')return {ignored:true,reason:'Metodo divergente'};
+ if(pay.status!=='approved'){
+  const states={pending:'pendente',in_process:'em_analise',authorized:'em_analise',rejected:'recusado',cancelled:'cancelado',refunded:'reembolsado',charged_back:'contestacao'};
+  const state=states[pay.status];if(!state)return {ignored:true};
+  await db.transaction(async()=>{
+   const locked=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(id);
+   if(!locked||(locked.mp_payment_id&&locked.mp_payment_id!==String(pay.id)))return;
+   if(locked.payment_status==='aprovado'&&!['refunded','charged_back'].includes(pay.status))return;
+   await db.prepare('UPDATE orders SET payment_status=? WHERE id=?').run(state,id);
+  });
+  return {approved:false};
+ }
  const applied=await db.transaction(async()=>{
   const locked=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(id);
-  if(!locked||locked.payment_status==='aprovado')return false;
+  if(!locked||['aprovado','reembolsado','contestacao'].includes(locked.payment_status))return false;
   // Não confirma o mesmo pedido com identificadores de pagamento diferentes.
   if(locked.mp_payment_id&&locked.mp_payment_id!==String(pay.id))return false;
   let missingStock=false;
@@ -185,10 +197,10 @@ async function processVerifiedPayment(paymentId){
   for(const item of snapshot){
    const qty=Number(item.qty),product=await db.prepare('SELECT stock FROM products WHERE id=? FOR UPDATE').get(item.id);
    if(!product||!Number.isInteger(qty)||qty<1||qty>20){missingStock=true;continue}
-   if(product.stock!==null){
+   if(product.stock!==null&&product.stock!==undefined){
     if(product.stock<qty){missingStock=true;continue}
     reserved.push({id:item.id,qty});
-   }
+   }else missingStock=true;
   }
   // Se faltar qualquer item, nenhuma unidade é debitada automaticamente.
   if(!missingStock)for(const line of reserved)await db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(line.qty,line.id);
@@ -197,7 +209,8 @@ async function processVerifiedPayment(paymentId){
    .run('aprovado',nextStatus,String(pay.id),id);
   return true;
  });
- if(applied)await sendTransactional(id,'approved');
+ // Se o provedor de e-mail falhar, o webhook pode repetir sem debitar estoque.
+ try{await sendTransactional(id,'approved')}catch{console.warn('[Email MAHACH] confirmação pendente para reenvio');}
  return {approved:true,newlyConfirmed:applied};
 }
 async function api(req,res,u){const method=req.method, route=u.pathname;
@@ -216,7 +229,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
  if(route==='/api/products'&&method==='GET'){
  if(!rate(req,'search',180))return problem(res,429,'Muitas buscas. Tente novamente.');
- const page=Math.min(500,Math.max(1,Number(u.searchParams.get('page'))||1)),limit=Math.min(48,Math.max(1,Number(u.searchParams.get('limit'))||24));
+ const page=Math.min(500,Math.max(1,Number.parseInt(u.searchParams.get('page'),10)||1)),limit=Math.min(48,Math.max(1,Number.parseInt(u.searchParams.get('limit'),10)||24));
  const category=str(u.searchParams.get('category'),64),brand=str(u.searchParams.get('brand'),100),family=str(u.searchParams.get('family'),85),q=normalizeCatalogQuery(str(u.searchParams.get('q'),100));
  const where=['active=1'],args=[];
  if(category&&category!=='todos'){where.push('category=?');args.push(category)}if(brand){where.push('brand=?');args.push(brand)}if(family){where.push('family=?');args.push(family)}
@@ -257,7 +270,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
  if(route==='/api/payments/mercadopago/webhook'&&method==='POST'){
   // Notificacoes externas nao possuem cookie; continuam exigindo HMAC valido.
-  if(process.env.MAHACH_ENABLE_CHECKOUT!=='true'&&process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE!=='true')return problem(res,503,'Checkout de teste ainda não habilitado');
+  // Continuar recebendo pagamentos já iniciados mesmo com novas compras suspensas.
   if(!rate(req,'mp-webhook',160,60000))return problem(res,429,'Limite de notificações');
   const id=commerce.verifyMPWebhook(conf,req,u);if(!id)return problem(res,401,'Assinatura inválida');
   await body(req);const result=await processVerifiedPayment(id);return json(res,200,{received:true,...result});
@@ -368,7 +381,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/admin/session'&&method==='GET'){const s=await session(req);return json(res,200,{authenticated:!!s,email:s?.email||null,csrf:s?.csrf||null})}
  if(route==='/api/admin/login'&&method==='POST'){
  if(!rate(req,'login',7,900000))return problem(res,429,'Muitas tentativas; aguarde 15 minutos');if(!checkOrigin(req))return problem(res,403,'Origem não autorizada');const a=await body(req),email=str(a.email,180).toLowerCase(),pass=typeof a.password==='string'?a.password:'';
- const usr=(await db.prepare('SELECT * FROM admins WHERE email=?').get(email));const salt=usr?.salt||crypto.randomBytes(16).toString('hex'),correct=usr?.hash||crypto.randomBytes(64).toString('hex');const attempt=crypto.scryptSync(pass.slice(0,1000),salt,64).toString('hex');if(!usr||!crypto.timingSafeEqual(Buffer.from(attempt,'hex'),Buffer.from(correct,'hex')))return problem(res,401,'Credenciais inválidas');
+ const usr=(await db.prepare('SELECT * FROM admins WHERE email=?').get(email));const salt=usr?.salt||crypto.randomBytes(16).toString('hex'),correct=usr?.hash||crypto.randomBytes(64).toString('hex');const attempt=(await scrypt(pass.slice(0,1000),salt,64)).toString('hex');if(!usr||!crypto.timingSafeEqual(Buffer.from(attempt,'hex'),Buffer.from(correct,'hex')))return problem(res,401,'Credenciais inválidas');
  const token=random(),csrf=random();(await db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now()));(await db.prepare('INSERT INTO sessions(token_hash,email,csrf,expires) VALUES (?,?,?,?)').run(hash(token),email,csrf,Date.now()+8*3600000));
  res.setHeader('Set-Cookie',cookieValue(req,token));return json(res,200,{ok:true,csrf,email});
  }
@@ -397,9 +410,9 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    return json(res,200,{ok:true,message:'Melhor Envio autenticou com sucesso na API oficial.'});
   }
   if(provider==='mercado-pago'){
-   const token=conf('MERCADO_PAGO_ACCESS_TOKEN');if(!token)return problem(res,400,'Configure o Access Token');
+   const token=commerce.accessToken(conf);if(!token)return problem(res,400,'Configure o Access Token');
    const response=await fetch('https://api.mercadopago.com/users/me',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},signal:AbortSignal.timeout(10000)});
-   if(!response.ok)return problem(res,502,'Mercado Pago recusou autenticação (HTTP '+response.status+')');return json(res,200,{ok:true,message:'Credencial Mercado Pago válida. Cobranças ainda não estão ativadas.'});
+   if(!response.ok)return problem(res,502,'Mercado Pago recusou autenticação (HTTP '+response.status+')');return json(res,200,{ok:true,message:'Token aceito na consulta da conta. Isto não homologa Pix, cartão ou permissões de cobrança.'});
   }
   if(provider==='email'){
    if(!conf('RESEND_API_KEY')||!conf('MAIL_FROM')||!conf('ADMIN_EMAIL'))return problem(res,400,'Configure API Key, remetente verificado e e-mail da loja');
@@ -436,7 +449,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/admin/stats'&&method==='GET')return json(res,200,{products:(await db.prepare('SELECT COUNT(*) n FROM products').get()).n,photos:(await db.prepare("SELECT COUNT(*) n FROM products WHERE image<>''").get()).n,orders:(await db.prepare('SELECT COUNT(*) n FROM orders').get()).n,customers:(await db.prepare('SELECT COUNT(*) n FROM customers').get()).n,pending:(await db.prepare("SELECT COUNT(*) n FROM orders WHERE status IN ('pedido_criado','aguardando_confirmacao')").get()).n,outOfStock:(await db.prepare('SELECT COUNT(*) n FROM products WHERE stock=0 AND active=1').get()).n,visible:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n,categories:(await db.prepare('SELECT COUNT(*) n FROM categories').get()).n,vendizapConfigured:!!(conf('VENDIZAP_ID')&&conf('VENDIZAP_SECRET')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),blingConfigured:!!(conf('BLING_CLIENT_ID')&&conf('BLING_CLIENT_SECRET')),mercadoPagoConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL'))});
  if(route==='/api/admin/import-csv'&&method==='POST'){if(!rate(req,'import',4,3600000))return problem(res,429,'Limite de importações excedido');const raw=await bodyCsv(req);try{return json(res,200,await importIntoPg(db,raw,searchText,secureUrl))}catch(e){return problem(res,400,e.message)}}
  if(route==='/api/admin/products'&&method==='GET'){
- const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number(u.searchParams.get('page'))||1));const where=q?'WHERE name ILIKE ? OR brand ILIKE ?':'',args=q?['%'+q+'%','%'+q+'%']:[];
+ const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number.parseInt(u.searchParams.get('page'),10)||1));const where=q?'WHERE name ILIKE ? OR brand ILIKE ?':'',args=q?['%'+q+'%','%'+q+'%']:[];
  return json(res,200,{total:(await db.prepare('SELECT COUNT(*) n FROM products '+where).get(...args)).n,products:(await db.prepare('SELECT * FROM products '+where+' ORDER BY name LIMIT 30 OFFSET ?').all(...args,(p-1)*30)),page:p});
  }
  if(route==='/api/admin/products'&&method==='POST'){
@@ -471,16 +484,17 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const results={};
   if(o.payment_status==='aprovado')results.purchase=await sendTransactional(o.id,'approved');
   else if(o.payment==='cash')results.receipt=await sendTransactional(o.id,'created');
-  if(o.delivery==='correios'&&o.tracking_code)results.tracking=await sendTransactional(o.id,'tracking');
+  if(['correios','transportadora'].includes(o.delivery)&&o.tracking_code)results.tracking=await sendTransactional(o.id,'tracking');
   return json(res,200,{ok:true,results});
  }
  const orderEdit=route.match(/^\/api\/admin\/orders\/(MH-[A-Z0-9]+)$/);
  if(orderEdit&&method==='PUT'){
- const x=await body(req),status=str(x.status,40),tracking_code=str(x.tracking_code,100),tracking_url=secureUrl(str(x.tracking_url,1500));if(!['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','enviado','pronto_retirada','concluido','cancelado'].includes(status))return problem(res,400,'Status inválido');const old=(await db.prepare('SELECT delivery,payment,payment_status,tracking_code FROM orders WHERE id=?').get(orderEdit[1]));if(!old)return problem(res,404,'Pedido não encontrado');
- if(['pix','card'].includes(old.payment)&&status==='pagamento_aprovado'&&old.payment_status!=='aprovado')return problem(res,409,'Pagamento online deve ser aprovado pelo Mercado Pago, nunca manualmente');
+ const x=await body(req),status=str(x.status,40),tracking_code=str(x.tracking_code,100),tracking_url=secureUrl(str(x.tracking_url,1500));if(!['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','embalado','enviado','pronto_retirada','concluido','cancelado'].includes(status))return problem(res,400,'Status inválido');const old=(await db.prepare('SELECT delivery,payment,payment_status,tracking_code FROM orders WHERE id=?').get(orderEdit[1]));if(!old)return problem(res,404,'Pedido não encontrado');
+ if(['pix','card'].includes(old.payment)&&['pagamento_aprovado','em_preparacao','embalado','enviado','pronto_retirada','concluido'].includes(status)&&old.payment_status!=='aprovado')return problem(res,409,'Pagamento online deve ser aprovado pelo Mercado Pago, nunca manualmente');
+ if(status==='enviado'&&['correios','transportadora'].includes(old.delivery)&&(!tracking_code||!tracking_url))return problem(res,400,'Informe código e link HTTPS da transportadora antes de marcar como enviado');
  const changed=old.tracking_code!==tracking_code;
  (await db.prepare("UPDATE orders SET status=?,tracking_code=?,tracking_url=?,payment_status=CASE WHEN ?='pagamento_aprovado' AND payment='cash' THEN 'aprovado' ELSE payment_status END,tracking_email_sent=CASE WHEN tracking_code<>? THEN 0 ELSE tracking_email_sent END WHERE id=?").run(status,tracking_code,tracking_url,status,tracking_code,orderEdit[1]));
- const mail=old.delivery==='correios'&&tracking_code&&changed&&['em_preparacao','enviado','concluido'].includes(status)?await sendTransactional(orderEdit[1],'tracking'):{};
+ const mail=['correios','transportadora'].includes(old.delivery)&&tracking_code&&changed&&['enviado','concluido'].includes(status)?await sendTransactional(orderEdit[1],'tracking'):{};
  return json(res,200,{ok:true,email:mail});
  }
  if(route==='/api/admin/bling/preview'&&method==='GET'){
@@ -495,7 +509,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
  return problem(res,404,'Rota não encontrada');
 }
-const server=http.createServer(async(req,res)=>{
+const server=http.createServer({requestTimeout:30000,headersTimeout:15000,maxHeaderSize:16384},async(req,res)=>{
  security(res);
  if(!rate(req,'general',800,60000))return problem(res,429,'Limite de requisições');
  try{await ready;const u=new URL(req.url,'http://localhost');if(u.pathname.startsWith('/api/'))await api(req,res,u);else if(['GET','HEAD'].includes(req.method))await staticFile(req,res,u);else problem(res,405,'Método não permitido')}catch(e){if(process.env.NODE_ENV!=='production'&&!e.status)console.error(e);problem(res,e.status||500,e.status?e.message:'Erro interno. Tente novamente.')}
