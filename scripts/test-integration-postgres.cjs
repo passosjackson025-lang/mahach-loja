@@ -9,7 +9,7 @@ const originalLoad=Module._load,realFetch=global.fetch;
 let paymentStatus='pending',badAmount=false,paymentCalls=0,preferences=0,lastShipping=null,emailBodies=[];
 const payments=new Map();
 const config={DATABASE_URL:database,MAHACH_SETTINGS_KEY:'00'.repeat(32),MAHACH_ENABLE_CHECKOUT:'true',MAHACH_ENABLE_ADMIN_WRITES:'true',MERCADO_PAGO_ACCESS_TOKEN:'fake-token',MERCADO_PAGO_WEBHOOK_SECRET:'fake-webhook',MERCADO_PAGO_PIX_ACCESS_TOKEN:'fake-pix-token',MERCADO_PAGO_PIX_WEBHOOK_SECRET:'fake-pix-webhook',PUBLIC_SITE_URL:'https://shop.invalid',MELHOR_ENVIO_TOKEN:'fake-shipping',ORIGIN_CEP:'08000000',MELHOR_ENVIO_SANDBOX:'true',RESEND_API_KEY:'fake-mail',MAIL_FROM:'MAHACH <mail@shop.invalid>',ADMIN_EMAIL:'admin@shop.invalid'};
-Object.assign(process.env,config);
+Object.assign(process.env,config,{BLING_CLIENT_ID:'fake-bling-id',BLING_CLIENT_SECRET:'fake-bling-secret',BLING_REDIRECT_URI:'https://shop.invalid/api/integrations/bling/callback'});
 function response(data,status=200){return {ok:status>=200&&status<300,status,json:async()=>data}}
 global.fetch=async(url,options={})=>{
  const u=String(url);
@@ -31,6 +31,8 @@ global.fetch=async(url,options={})=>{
  if(u.includes('melhorenvio.com.br/api/v2/me/shipment/calculate')){
   lastShipping=JSON.parse(options.body);return response([{name:'Entrega teste',company:{name:'Jadlog'},price:'12.34',delivery_time:3}]);
  }
+ if(u==='https://api.bling.com.br/Api/v3/oauth/token')return response({access_token:'fake-bling-access',refresh_token:'fake-bling-refresh',expires_in:3600});
+ if(u==='https://api.bling.com.br/Api/v3/pedidos/vendas?pagina=1&limite=1')return response({data:[]});
  if(u==='https://api.resend.com/emails'){emailBodies.push(JSON.parse(options.body));return response({id:'mail-'+emailBodies.length},201)}
  throw Error('Integração externa bloqueada neste teste: '+u);
 };
@@ -63,6 +65,17 @@ async function main(){
  let r=await fetch(base+'/api/admin/products');assert.equal(r.status,401);
  r=await post('/api/admin/login',{email:'admin@shop.invalid',password:'password-test-only'});assert.equal(r.status,200);
  const auth=await r.json();headers={Cookie:r.headers.get('set-cookie').split(';')[0],'x-csrf-token':auth.csrf};
+ r=await fetch(base+'/api/admin/settings',{headers});assert.equal(r.status,200);assert.ok(!(await r.json()).fields.some(f=>f.key==='BLING_ACCESS_TOKEN'));
+ r=await fetch(base+'/api/admin/settings',{method:'PUT',headers:{...headers,Origin:base,'Content-Type':'application/json'},body:JSON.stringify({values:{BLING_ACCESS_TOKEN:'injected'},clear:[]})});assert.equal(r.status,400,'Tokens internos não podem ser injetados pelo painel');
+ r=await post('/api/admin/bling/connect',{});assert.equal(r.status,401,'OAuth exige administrador');
+ r=await post('/api/admin/bling/connect',{},headers);assert.equal(r.status,200);
+ const connect=await r.json(),oauthCookie=r.headers.get('set-cookie').split(';')[0],state=new URL(connect.url).searchParams.get('state');
+ r=await fetch(base+'/api/integrations/bling/callback?state='+state+'&code=fake-code',{headers:{Cookie:oauthCookie},redirect:'manual'});assert.equal(r.status,303);
+ const tokenRows=(await raw.query("SELECT value,encrypted FROM mahach_stage.site_settings WHERE key IN ('BLING_ACCESS_TOKEN','BLING_REFRESH_TOKEN')")).rows;
+ assert.equal(tokenRows.length,2);assert.ok(tokenRows.every(x=>Number(x.encrypted)===1&&!x.value.includes('fake-bling')),'OAuth tokens criptografados');
+ r=await post('/api/admin/integrations/test',{provider:'bling'},headers);assert.equal(r.status,200);assert.equal((await r.json()).ok,true);
+ r=await fetch(base+'/api/integrations/bling/callback?state='+state+'&code=fake-code',{headers:{Cookie:oauthCookie},redirect:'manual'});assert.equal(r.status,401,'Callback só pode ser usado uma vez');
+
  r=await fetch(base+'/api/admin/products?q=SKU-INACTIVE',{headers});assert.equal(r.status,200);assert.equal((await r.json()).products[0].id,'inactive-product');
  r=await fetch(base+'/api/admin/products/inactive-product',{method:'PUT',headers:{...headers,Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Produto guardado',price:95,category:'perfumes',stock:1,active:false,stock_confirmed:true})});assert.equal(r.status,200);
  const inactive=(await raw.query("SELECT sku,active FROM mahach_stage.products WHERE id='inactive-product'")).rows[0];assert.ok(inactive.sku);assert.equal(Number(inactive.active),0);

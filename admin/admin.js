@@ -84,7 +84,7 @@ $('#blingPreviewButton')?.addEventListener('click',async()=>{try{const r=await a
 $('#syncButton')?.addEventListener('click',async e=>{e.target.disabled=true;$('#syncStatus').textContent='Sincronizando…';try{const r=await api('/api/admin/sync-vendizap','POST',{});$('#syncStatus').textContent=`${r.synced} produtos atualizados e ${r.images} fotos encontradas.`;await stats()}catch(x){$('#syncStatus').textContent=x.message}finally{e.target.disabled=false}});
 
 // Configurações persistentes: campos secretos só retornam indicadores, nunca o valor.
-const SECTIONS={'loja':'Loja e retirada','vendizap':'Vendizap — Catálogo','melhor-envio':'Melhor Envio — Transportadoras','bling':'Bling — ERP (OAuth pendente)','mercado-pago':'Mercado Pago — Pagamentos (cobrança pendente)','email':'E-mails transacionais — Resend'};
+const SECTIONS={'loja':'Loja e retirada','vendizap':'Vendizap — Catálogo','melhor-envio':'Melhor Envio — Transportadoras','bling':'Bling — Conexão com ERP','mercado-pago':'Mercado Pago — Pagamentos (cobrança pendente)','email':'E-mails transacionais — Resend'};
 let settingsSnapshot=[];
 async function loadSettings(){
  const {fields}=await api('/api/admin/settings');settingsSnapshot=fields;
@@ -104,7 +104,10 @@ async function loadSettings(){
   box.append(grid);root.append(box);
  }
  const tests=$('#integrationTests');tests.replaceChildren();
- for(const [p,n]of [['vendizap','Testar Vendizap'],['melhor-envio','Testar Melhor Envio'],['mercado-pago','Testar Mercado Pago (cartão)'],['mercado-pago-pix','Testar conta da integração Pix'],['bling','Verificar status Bling']]){
+ const connect=elem('button','Autorizar conta Bling');connect.type='button';
+ connect.onclick=async()=>{connect.disabled=true;try{const r=await api('/api/admin/bling/connect','POST',{});const u=new URL(r.url);if(u.origin!=='https://bling.com.br')throw Error('Retorno inválido');location.assign(u.href)}catch(e){$('#connectionTestResult').textContent=e.message;connect.disabled=false}};tests.append(connect);
+
+ for(const [p,n]of [['vendizap','Testar Vendizap'],['melhor-envio','Testar Melhor Envio'],['mercado-pago','Testar Mercado Pago (cartão)'],['mercado-pago-pix','Testar conta da integração Pix'],['bling','Verificar status Bling'],['email','Enviar e-mail de teste ao administrador']]){
   const b=elem('button',n);b.type='button';b.onclick=async()=>{b.disabled=true;$('#connectionTestResult').textContent='Verificando conexão…';try{const r=await api('/api/admin/integrations/test','POST',{provider:p});$('#connectionTestResult').textContent=r.message}catch(e){$('#connectionTestResult').textContent=e.message}finally{b.disabled=false}};tests.append(b)
  }
 }

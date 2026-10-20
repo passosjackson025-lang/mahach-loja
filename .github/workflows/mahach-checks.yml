@@ -38,11 +38,15 @@ jobs:
         run: |
           node --check server.js
           node --check commerce-flows.js
+          node --check bling-oauth.js
+          node --check site-settings-pg.js
           node --check checkout.js
           node --check tracking.js
           node --check admin/admin.js
       - name: Security and provider boundaries (no real integrations)
         run: node scripts/test-launch-safety.cjs
+      - name: Bling OAuth security and sandbox card URL (mock)
+        run: node scripts/test-bling-oauth.cjs
       - name: Catalog and private checkout
         run: node scripts/test-offline.cjs
       - name: Admin, CSRF and photo

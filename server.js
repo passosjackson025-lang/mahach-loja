@@ -16,10 +16,12 @@ const MAX_BODY=32*1024, CATEGORIES=[['perfumes','Perfumaria','Fragrâncias para 
 const DEFAULT_WHATSAPP='5511995209827';
 // Não usar SQLite na Render. A chave local é carregada a partir de private/settings.key
 // ou da variável MAHACH_SETTINGS_KEY (recomendada para Render).
-let settings;
+let settings,bling;
+const {createBling}=require('./bling-oauth');
 const ready=(async()=>{
  await bootstrap();
  settings=await makeSettingsPg(db,path.join(PRIVATE,'settings.key'));
+ bling=createBling(settings);
 })();
 function normalizeCatalogQuery(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
 const conf=(name)=>settings.get(name);
@@ -262,6 +264,13 @@ async function replayCheckout(res,identity){
 }
 
 async function api(req,res,u){const method=req.method, route=u.pathname;
+ if(route==='/api/integrations/bling/callback'&&method==='GET'){
+  res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');
+  const browserState=cookies(req).mahach_bling_state;
+  res.setHeader('Set-Cookie','mahach_bling_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/integrations/bling/callback; Max-Age=0');
+  await bling.finish(u.searchParams.get('state'),browserState,u.searchParams.get('code'),async owner=>!!await db.prepare('SELECT email FROM sessions WHERE token_hash=? AND expires>?').get(owner,Date.now()));
+  res.writeHead(303,{Location:'/admin/painel.html?bling=conectado'});return res.end();
+ }
  if(route==='/sitemap.xml'&&method==='GET'){
  const origin=commerce.httpsSite(conf('PUBLIC_SITE_URL'));if(!origin)return problem(res,503,'Configure a URL HTTPS principal da loja');
  const pages=['/','/produtos/','/produtos/perfumaria-arabe/','/produtos/corpo-e-cuidado/','/produtos/beleza-essencial/'];
@@ -456,6 +465,12 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  const s=await logged(req,res);if(!s)return;
  if(method!=='GET'&&!canWrite(req,s))return problem(res,403,'Sessão ou CSRF inválido');
  if(method!=='GET'&&route!=='/api/admin/logout'&&process.env.MAHACH_ENABLE_ADMIN_WRITES!=='true')return problem(res,503,'Gravações desativadas nesta versão. Reinicie o teste com MAHACH_ENABLE_ADMIN_WRITES=true depois de confirmar o backup e o banco de testes.');
+ if(route==='/api/admin/bling/connect'&&method==='POST'){
+  if(!rate(req,'bling-oauth',5,600000))return problem(res,429,'Aguarde para autorizar novamente');
+  const result=bling.start(hash(cookies(req).mahach_session));
+  res.setHeader('Set-Cookie','mahach_bling_state='+result.state+'; HttpOnly; Secure; SameSite=Lax; Path=/api/integrations/bling/callback; Max-Age=600');
+  return json(res,200,{url:result.url});
+ }
  if(route==='/api/admin/launch-check'&&method==='GET'){
  const catalog=await db.prepare("SELECT COUNT(*) total,COUNT(*) FILTER(WHERE active=1 AND stock_confirmed=true AND stock>0 AND price>0) with_confirmed_stock,COUNT(*) FILTER(WHERE active=1 AND shipping_confirmed=true AND weight>0 AND width>0 AND height>0 AND length>0) with_shipping,COUNT(*) FILTER(WHERE active=1 AND (sku IS NULL OR sku='')) without_sku FROM products").get();
  return json(res,200,{catalog,paymentConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),requiresPaymentHomologation:true,notice:'Configuração presente não comprova cobrança, cotação ou entrega de e-mail reais.'});
@@ -491,7 +506,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    if(!result.ok)return problem(res,502,result.reason);
    return json(res,200,{ok:true,message:'E-mail de teste aceito pelo provedor. Confirme a chegada na caixa de entrada.'});
   }
-  if(provider==='bling')return json(res,200,{ok:false,message:'Bling exige o fluxo OAuth 2.0 e autorização da sua conta; salvar Client ID/Secret não conclui a conexão.'});
+  if(provider==='bling')return json(res,200,await bling.test());
   return problem(res,400,'Integração desconhecida');
  }
 

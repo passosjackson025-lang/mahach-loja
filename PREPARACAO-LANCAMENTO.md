@@ -81,3 +81,23 @@ Referências verificadas: https://neon.com/docs/guides/backup-restore (snapshot 
 2. Publicar a PR 1 somente com os testes aprovados. Não mudar planos, domínio, credenciais ou flags de liberação pública.
 3. Conferir o deploy Render e repetir a verificação pública somente por GET. Manter checkout público fechado para a homologação real.
 A liberação pública de pagamentos e qualquer cobrança real continuam fora dessa operação.
+
+## Conexão Bling e testes de cartão — atualização
+- Implementado OAuth 2.0 do Bling no painel: state aleatório, cookie HttpOnly/Secure/SameSite=Lax exclusivo para callback, vínculo à sessão administrativa ainda válida, prazo de dez minutos, uso único e invalidação se as credenciais mudarem. Reiniciar o processo cancela autorizações pendentes; basta iniciar novamente.
+- Tokens e renovação são gravados criptografados no banco de configurações existente, sem nova migração; não aparecem na lista do painel e não podem ser inseridos pela API pública de configurações. Renovação simultânea usa uma requisição por processo.
+- Configurar no aplicativo Bling o retorno exato PUBLIC_SITE_URL + /api/integrations/bling/callback, cadastrar Client ID/Secret pelo painel privado e clicar em Autorizar conta Bling. A autorização acontece no Bling; esta etapa requer o titular da conta.
+- Conexão OAuth NÃO implementa exportação automática de pedidos, autorização de NF-e ou compra de etiqueta. A exportação ainda é prévia. Permanecem bloqueios de lançamento; não considerar nota emitida.
+- Credenciais Mercado Pago iniciadas por TEST- agora selecionam sandbox_init_point, inclusive ao recuperar uma preferência. Não há fallback para init_point de produção quando a URL de testes não estiver presente.
+- Painel inclui botão de e-mail de teste ao ADMIN_EMAIL configurado. Mensagem aceita pelo Resend não prova entrega na caixa de entrada.
+- Ainda faltam nome real do domínio comprado, remetente, configuração DNS, autorização Bling, certificado/configuração fiscal e homologação externa. Não foram lidos ou divulgados tokens existentes.
+
+### Fluxo operacional e limites atuais
+1. Pedido e estoque: reservar somente estoque confirmado; recalcular valores no servidor.
+2. Pagamento: QR/Pix Copia e Cola ou cartão no Mercado Pago; atualizar por assinatura e consulta ao provedor. Um teste local simulado não prova pagamento externo.
+3. E-mail: após aprovação real, enviar confirmação pelo provedor; marcar o envio apenas após identificação da mensagem aceita.
+4. Fiscal: integrar pedidos ao Bling com SKUs, cliente e endereço estruturados, validar regras fiscais com o responsável e emitir somente com autorização SEFAZ. Essa exportação ainda não foi implementada. Não substituir documento fiscal por recibo da loja.
+5. Expedição: cotação já usa Melhor Envio. Compra/geração de etiqueta e automação de coleta ainda não implementadas; nunca cobrar saldo sem aprovação.
+6. Rastreio: cadastro no painel e e-mail estão implementados; recebimento automático de eventos Melhor Envio ainda não implementado. É necessário aplicativo com webhook, assinatura e vínculo do identificador de etiqueta ao pedido; etiquetas criadas fora do aplicativo não geram eventos para ele.
+7. Entrega: atualizar status por evento verificado ou conferência operacional, não por confirmação do pagamento.
+
+Fontes oficiais: https://developer.bling.com.br/aplicativos ; https://developer.bling.com.br/webhooks ; https://docs.melhorenvio.com.br/docs/webhooks ; https://resend.com/docs/dashboard/domains/introduction

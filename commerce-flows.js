@@ -10,10 +10,14 @@ function pixConfiguration(conf){
 function paymentUrl(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&/(^|\.)mercadopago\.com(\.br)?$/.test(u.hostname)?u.href:null}catch{return null}}
 function configured(conf){return !!(accessToken(conf)&&conf('MERCADO_PAGO_WEBHOOK_SECRET')&&httpsSite(conf('PUBLIC_SITE_URL')))}
 function htmlesc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function preferenceUrl(conf,data){
+ const testing=accessToken(conf).startsWith('TEST-');
+ return paymentUrl(testing?data.sandbox_init_point:data.init_point);
+}
 async function getPreference(conf,id){
  if(!/^[a-zA-Z0-9_-]{1,150}$/.test(String(id)))throw Object.assign(Error('Preferência inválida'),{status:400});
  const response=await fetch(MP+'/checkout/preferences/'+encodeURIComponent(id),{headers:{Authorization:'Bearer '+accessToken(conf),Accept:'application/json'},signal:AbortSignal.timeout(15000)});
- const data=await response.json().catch(()=>({})),url=paymentUrl(data.init_point);
+ const data=await response.json().catch(()=>({})),url=preferenceUrl(conf,data);
  if(!response.ok||!url)throw Object.assign(Error('Não foi possível recuperar o checkout de cartão'),{status:502});
  return {preferenceId:String(data.id),checkoutUrl:url};
 }
@@ -25,8 +29,8 @@ async function createPreference(conf,order,items,token){
  if(order.shipping_cost>0)lineItems.push({id:'frete',title:'Frete via transportadora',quantity:1,unit_price:Number(order.shipping_cost),currency_id:'BRL'});
  const body={items:lineItems,external_reference:order.id,payer:{name:order.customer_name,email:order.customer_email},back_urls:{success:back,pending:back,failure:back},auto_return:'approved',notification_url:origin+'/api/payments/mercadopago/webhook',statement_descriptor:'MAHACH',payment_methods:{excluded_payment_types:(order.payment==='pix'?['credit_card','debit_card','ticket','prepaid_card']:['bank_transfer','ticket','atm','prepaid_card','debit_card']).map(id=>({id}))}};
  const res=await fetch(MP+'/checkout/preferences',{method:'POST',headers:{Authorization:'Bearer '+accessToken(conf),'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(18000)});
- const response=await res.json().catch(()=>({}));if(!res.ok||!paymentUrl(response.init_point))throw Object.assign(new Error('Mercado Pago não conseguiu iniciar o checkout (HTTP '+res.status+').'),{status:502});
- return {preferenceId:String(response.id||''),checkoutUrl:paymentUrl(response.init_point)};
+ const response=await res.json().catch(()=>({}));if(!res.ok||!preferenceUrl(conf,response))throw Object.assign(new Error('Mercado Pago não conseguiu iniciar o checkout (HTTP '+res.status+').'),{status:502});
+ return {preferenceId:String(response.id||''),checkoutUrl:preferenceUrl(conf,response)};
 }
 // Dados usados somente na chamada ao Mercado Pago; nao persistimos CPF na MAHACH.
 function validCPF(value){
@@ -93,4 +97,4 @@ async function sendEmail(conf,to,subject,html){
  if(!result||typeof result.id!=='string'||!result.id)return {ok:false,reason:'Provedor não confirmou o identificador da mensagem'};
  return {ok:true,providerId:result.id};
 }
-module.exports={pixConfiguration,getPreference,accessToken,paymentUrl,cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};
+module.exports={preferenceUrl,pixConfiguration,getPreference,accessToken,paymentUrl,cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};
