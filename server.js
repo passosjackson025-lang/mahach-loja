@@ -37,11 +37,14 @@ async function body(req){if(!String(req.headers['content-type']||'').startsWith(
 async function bodyCsv(req){if(!/^text\/csv(?:;|$)/i.test(req.headers['content-type']||''))throw Object.assign(new Error('Envie CSV com Content-Type: text/csv'),{status:415});let bytes=0,chunks=[];for await(const part of req){bytes+=part.length;if(bytes>8*1024*1024)throw Object.assign(new Error('CSV maior que 8 MB'),{status:413});chunks.push(part)}return Buffer.concat(chunks).toString('utf8')}
 function str(x,max=255){return typeof x==='string'?x.trim().slice(0,max):''}
 function number(x){const n=Number(x);return Number.isFinite(n)?n:NaN}
-async function validProduct(data){
+async function validProduct(data,existingId=''){
  const p={id:str(data.id,80),name:str(data.name,220),description:str(data.description,10000),category:str(data.category,64),brand:str(data.brand,100),family:str(data.family,85),image:secureUrl(str(data.image,1500)),sku:str(data.sku,80),price:number(data.price),stock:data.stock===''||data.stock===null||data.stock===undefined?null:Number(data.stock),active:data.active===false||data.active===0?0:1,weight:data.weight||null,width:data.width||null,height:data.height||null,length:data.length||null};
  if(!p.name||p.name.length<2||!p.category||!(await db.prepare('SELECT id FROM categories WHERE id=?').get(p.category))||!Number.isFinite(p.price)||p.price<0||p.price>100000)throw Object.assign(new Error('Confira nome, categoria e preço'),{status:400});
  if(p.stock!==null&&(!Number.isInteger(p.stock)||p.stock<0))throw Object.assign(new Error('Estoque inválido'),{status:400});
  for(const m of ['weight','width','height','length']){if(p[m]!==null){p[m]=number(p[m]);if(!(p[m]>0&&p[m]<10000))throw Object.assign(new Error('Dimensão ou peso inválido'),{status:400})}}
+ p.sku=p.sku||('MHC-'+(existingId||crypto.randomBytes(12).toString('hex')).toUpperCase());
+ p.stock_confirmed=data.stock_confirmed===true&&p.stock!==null;
+ p.shipping_confirmed=data.shipping_confirmed===true&&['weight','width','height','length'].every(k=>Number(p[k])>0);
  p.search_text=searchText(p);return p;
 }
 function cookies(req){return Object.fromEntries((req.headers.cookie||'').split(';').map(x=>x.trim().split('=')).filter(x=>x.length===2))}
@@ -57,7 +60,7 @@ function canWrite(req,s){return checkOrigin(req)&&req.headers['x-csrf-token']===
 function cookieValue(req,value,maxAge=28800){const secure=(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)?'; Secure':'';return `mahach_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`}
 const counters=new Map();
 function rate(req,key,max,window=60000){const ip=req.socket.remoteAddress||'local',n=Date.now(),k=`${key}:${ip}`,v=counters.get(k)||{time:n,count:0};if(n-v.time>window){v.time=n;v.count=0}v.count++;counters.set(k,v);if(counters.size>4000)for(const [k,v]of counters)if(n-v.time>3600000)counters.delete(k);return v.count<=max}
-function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku}}
+function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku,stock_confirmed:p.stock_confirmed===true,shipping_confirmed:p.shipping_confirmed===true}}
 const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.ttf':'font/ttf','.ico':'image/x-icon'};
 async function staticFile(req,res,url){
  let pathname;try{pathname=decodeURIComponent(url.pathname)}catch{return problem(res,400,'URL inválida')}
@@ -107,7 +110,7 @@ async function shippingQuote(payload){
  const items=await collectItems(payload.items);
  if(!items.length)throw Object.assign(new Error('Sacola vazia'),{status:400});
  // Frete exige peso e dimensoes reais da embalagem; sem estimativas ficticias.
- if(items.some(({p})=>![p.width,p.height,p.length,p.weight].every(n=>Number.isFinite(Number(n))&&Number(n)>0)))throw Object.assign(new Error('Para calcular frete, cadastre peso e dimensoes de todos os produtos da sacola.'),{status:422});
+ if(items.some(({p})=>p.shipping_confirmed!==true||![p.width,p.height,p.length,p.weight].every(n=>Number.isFinite(Number(n))&&Number(n)>0)))throw Object.assign(new Error('Para calcular frete, cadastre peso e dimensoes de todos os produtos da sacola.'),{status:422});
  const products=items.map(({p,qty})=>({id:p.id,width:Number(p.width),height:Number(p.height),length:Number(p.length),weight:Number(p.weight),insurance_value:p.price,quantity:qty}));
  const api=conf('MELHOR_ENVIO_SANDBOX')==='true'?'https://sandbox.melhorenvio.com.br':'https://melhorenvio.com.br';
  const r=await fetch(api+'/api/v2/me/shipment/calculate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Accept':'application/json','User-Agent':'MAHACH ('+(conf('SHIPPING_CONTACT_EMAIL')||'suporte@mahach.com.br')+')'},body:JSON.stringify({from:{postal_code:origin},to:{postal_code:cep},products}),signal:AbortSignal.timeout(15000)});
@@ -131,7 +134,7 @@ async function shippingQuote(payload){
   .map(x=>({service:String(x.name||'Entrega'),carrier:/^jet$/i.test(String(x.company?.name||''))?'J&T Express':String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
   .filter(x=>Number.isFinite(x.cost)&&x.cost>=0&&Number.isFinite(x.days)&&x.days>=0);
 }
-async function collectItems(items){if(!Array.isArray(items)||items.length>30)throw Object.assign(new Error('Sacola inválida'),{status:400});const ids=new Set(),out=[];for(const it of items){const id=str(it.id,80),qty=Number(it.qty);if(!id||ids.has(id)||!Number.isInteger(qty)||qty<1||qty>20)throw Object.assign(new Error('Quantidade inválida'),{status:400});ids.add(id);const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(id));if(!p)throw Object.assign(new Error('Produto indisponível'),{status:400});if(!Number.isFinite(Number(p.price))||Number(p.price)<=0)throw Object.assign(new Error('Produto sem preço válido'),{status:400});if(p.stock===null||p.stock===undefined||!Number.isInteger(Number(p.stock))||Number(p.stock)<qty)throw Object.assign(new Error('Quantidade indisponível: '+p.name),{status:400});out.push({p,qty})}return out}
+async function collectItems(items){if(!Array.isArray(items)||items.length>30)throw Object.assign(new Error('Sacola inválida'),{status:400});const ids=new Set(),out=[];for(const it of items){const id=str(it.id,80),qty=Number(it.qty);if(!id||ids.has(id)||!Number.isInteger(qty)||qty<1||qty>20)throw Object.assign(new Error('Quantidade inválida'),{status:400});ids.add(id);const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(id));if(!p)throw Object.assign(new Error('Produto indisponível'),{status:400});if(!Number.isFinite(Number(p.price))||Number(p.price)<=0)throw Object.assign(new Error('Produto sem preço válido'),{status:400});if(p.stock_confirmed!==true||p.stock===null||p.stock===undefined||!Number.isInteger(Number(p.stock))||Number(p.stock)<qty)throw Object.assign(new Error('Quantidade indisponível: '+p.name),{status:400});out.push({p,qty})}return out}
 
 // Upload de imagens WEBP: cliente normaliza foto no Canvas. Servidor valida assinatura,
 // dimensões 1200 x 1200 e grava nome aleatório, sem sobrescrever outros arquivos.
@@ -182,6 +185,10 @@ async function processVerifiedPayment(paymentId){
    const locked=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(id);
    if(!locked||(locked.mp_payment_id&&locked.mp_payment_id!==String(pay.id)))return;
    if(locked.payment_status==='aprovado'&&!['refunded','charged_back'].includes(pay.status))return;
+   if(pay.status==='cancelled'&&locked.payment_status!=='aprovado'&&locked.stock_reserved){
+    for(const item of JSON.parse(locked.items_json).sort((a,b)=>String(a.id).localeCompare(String(b.id))))await db.prepare('UPDATE products SET stock=stock+? WHERE id=?').run(item.qty,item.id);
+    await db.prepare('UPDATE orders SET stock_reserved=? WHERE id=?').run(false,id);
+   }
    await db.prepare('UPDATE orders SET payment_status=? WHERE id=?').run(state,id);
   });
   return {approved:false};
@@ -194,9 +201,9 @@ async function processVerifiedPayment(paymentId){
   let missingStock=false;
   const reserved=[];
   const snapshot=JSON.parse(locked.items_json).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-  for(const item of snapshot){
-   const qty=Number(item.qty),product=await db.prepare('SELECT stock FROM products WHERE id=? FOR UPDATE').get(item.id);
-   if(!product||!Number.isInteger(qty)||qty<1||qty>20){missingStock=true;continue}
+  for(const item of locked.stock_reserved?[]:snapshot){
+   const qty=Number(item.qty),product=await db.prepare('SELECT stock,stock_confirmed FROM products WHERE id=? FOR UPDATE').get(item.id);
+   if(!product||product.stock_confirmed!==true||!Number.isInteger(qty)||qty<1||qty>20){missingStock=true;continue}
    if(product.stock!==null&&product.stock!==undefined){
     if(product.stock<qty){missingStock=true;continue}
     reserved.push({id:item.id,qty});
@@ -205,7 +212,7 @@ async function processVerifiedPayment(paymentId){
   // Se faltar qualquer item, nenhuma unidade é debitada automaticamente.
   if(!missingStock)for(const line of reserved)await db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(line.qty,line.id);
   const nextStatus=missingStock?'estoque_pendente':'pagamento_aprovado';
-  await db.prepare('UPDATE orders SET payment_status=?,status=?,mp_payment_id=? WHERE id=?')
+  await db.prepare('UPDATE orders SET payment_status=?,status=?,mp_payment_id=?,stock_reserved=false WHERE id=?')
    .run('aprovado',nextStatus,String(pay.id),id);
   return true;
  });
@@ -213,6 +220,40 @@ async function processVerifiedPayment(paymentId){
  try{await sendTransactional(id,'approved')}catch{console.warn('[Email MAHACH] confirmação pendente para reenvio');}
  return {approved:true,newlyConfirmed:applied};
 }
+
+function checkoutIdentity(key){
+ if(typeof key!=='string'||!/^[-a-f0-9]{36,80}$/i.test(key))return null;
+ return {id:'MH-'+hash('MAHACH-ORDER:'+key).slice(0,24).toUpperCase(),token:crypto.createHash('sha256').update('MAHACH-ACCESS:'+key).digest('base64url')};
+}
+async function cardCheckout(orderId,token){
+ return db.transaction(async()=>{
+  const o=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(orderId);
+  if(!o||o.payment!=='card')throw Object.assign(Error('Pedido de cartão não encontrado'),{status:404});
+  if(o.payment_status==='aprovado')return {paid:true};
+  if(o.mp_preference_id)return commerce.getPreference(conf,o.mp_preference_id);
+  const mp=await commerce.createPreference(conf,o,JSON.parse(o.items_json),token);
+  await db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(mp.preferenceId,o.id);
+  return mp;
+ });
+}
+async function replayCheckout(res,identity){
+ const o=await db.prepare('SELECT * FROM orders WHERE id=? AND public_token_hash=?').get(identity.id,hash(identity.token));
+ if(!o)return false;
+ const result={reference:o.id,token:identity.token,replayed:true};
+ if(o.payment_status==='aprovado'){json(res,200,{...result,mode:'paid'});return true}
+ if(o.status==='cancelado'||['cancelado','reembolsado','contestacao'].includes(o.payment_status)){
+  json(res,409,{error:'Este pedido foi encerrado. Consulte o acompanhamento antes de iniciar outro pagamento.'});return true;
+ }
+ if(o.payment==='card'){
+  try{const mp=await cardCheckout(o.id,identity.token);json(res,200,{...result,mode:mp.paid?'paid':'online',checkoutUrl:mp.checkoutUrl||''})}
+  catch{json(res,502,{error:'Checkout de cartão indisponível. Tente novamente para recuperar o mesmo pedido.',reference:o.id})}
+ }else if(o.payment==='pix'){
+  const pix=o.mp_payment_id?commerce.pixDetails(await commerce.getVerifiedPayment(conf,o.mp_payment_id)):null;
+  json(res,200,{...result,mode:pix?.qrCode?'pix':'pix-retry',pix,notice:'Pedido recuperado. Não crie outro pagamento.'});
+ }else json(res,200,{...result,mode:'pickup-cash'});
+ return true;
+}
+
 async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/health'&&method==='GET')return json(res,200,{ok:true,catalog:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n});
  if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:await checkoutAllowed(req),testMode:process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&process.env.MAHACH_ENABLE_CHECKOUT!=='true'},{'Cache-Control':'no-store'});
@@ -312,7 +353,10 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   if(!await checkoutAllowed(req))return problem(res,503,'Checkout indisponivel para visitantes durante os testes');
   if(!rate(req,'order',8,900000))return problem(res,429,'Muitas solicitações. Tente mais tarde');
   if(!checkOrigin(req))return problem(res,403,'Origem não autorizada');
-  const data=await body(req),items=await collectItems(data.items);if(!items.length)return problem(res,400,'Sua sacola está vazia');
+  const data=await body(req),identity=checkoutIdentity(data.checkoutKey);
+   if(data.checkoutKey&&!identity)return problem(res,400,'Identificador de tentativa inválido');
+   if(identity&&await replayCheckout(res,identity))return;
+   const items=await collectItems(data.items);if(!items.length)return problem(res,400,'Sua sacola está vazia');
   // Nunca permitir pagamento se a loja nao sabe quantas unidades tem.
   if(items.some(({p})=>p.stock===null||p.stock===undefined))return problem(res,400,'Informe o estoque dos produtos antes de receber pagamentos');
   const customer_name=str(data.name,120),phone=str(data.phone,20).replace(/\D/g,''),email=str(data.email,200).toLowerCase(),delivery=str(data.delivery,20),payment=str(data.payment,30),cep=str(data.cep,12).replace(/\D/g,''),address=str(data.address,320);
@@ -331,15 +375,23 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    freight=entry.cost;shippingService=entry.carrier+' · '+entry.service;
   }
   const subtotal=Math.round(items.reduce((acc,x)=>acc+x.p.price*x.qty,0)*100)/100;
-  const id='MH-'+crypto.randomBytes(5).toString('hex').toUpperCase(),token=random(),created=new Date().toISOString();
+  const id=identity?.id||'MH-'+crypto.randomBytes(5).toString('hex').toUpperCase(),token=identity?.token||random(),created=new Date().toISOString();
   const snapshot=items.map(({p,qty})=>({id:p.id,name:p.name,qty,unit_price:p.price}));
   const order={id,customer_name,customer_email:email,subtotal,shipping_cost:freight,payment};
   let checkoutUrl='',mpPreferenceId='',pix=null;
   const marketingOptIn=data.marketingOptIn===true || data.marketingOptIn==='on';
   await db.transaction(async()=>{
-   await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id,marketing_opt_in) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+   const made=await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id,marketing_opt_in) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(id,hash(token),created,'pedido_criado',customer_name,phone,email,delivery==='pickup'?'':cep,delivery==='pickup'?'':address,delivery,payment,JSON.stringify(snapshot),subtotal,freight,assist?'Mercadoria paga online; corrida Uber/99 NÃO incluída no total. Negociar por WhatsApp após pagamento aprovado':delivery==='pickup'?'Retirada sem frete; '+(conf('SHOP_ADDRESS')||'endereço a informar'):'Melhor Envio · cotação selecionada',shippingService,mpPreferenceId,marketingOptIn);
-   // Uma compra sem marcar a opção NUNCA concede permissão para marketing.
+   if(!made.changes)return false;
+    // Reservar antes de chamar o provedor: duas sacolas não podem comprar a última unidade.
+    for(const line of [...items].sort((a,b)=>a.p.id.localeCompare(b.p.id))){
+     const current=await db.prepare('SELECT stock,stock_confirmed,active FROM products WHERE id=? FOR UPDATE').get(line.p.id);
+     if(!current||current.active!==1||current.stock_confirmed!==true||current.stock<line.qty)throw Object.assign(Error('Estoque insuficiente. Atualize a sacola antes de pagar.'),{status:409});
+     await db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(line.qty,line.p.id);
+    }
+    await db.prepare('UPDATE orders SET stock_reserved=? WHERE id=?').run(true,id);
+    // Uma compra sem marcar a opção NUNCA concede permissão para marketing.
    // Um opt-in registrado anteriormente não é apagado por uma compra posterior.
    await db.prepare(`INSERT INTO customers(email,name,phone,marketing_opt_in,marketing_consent_at,first_order_at,last_order_at,last_order_id)
     VALUES(?,?,?,?,CASE WHEN ? THEN NOW() ELSE NULL END,NOW(),NOW(),?)
@@ -353,7 +405,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   // O pedido existe antes de chamar o provedor; o webhook nunca chega sem pedido associado.
   if(payment==='card'){
    try{
-    const mp=await commerce.createPreference(conf,order,snapshot,token);
+    const mp=await cardCheckout(id,token);
     checkoutUrl=mp.checkoutUrl;mpPreferenceId=mp.preferenceId;
     await db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(mpPreferenceId,id);
    }catch(e){return json(res,502,{error:'Pedido registrado, mas o checkout de cartao nao foi gerado. Anote a referencia e procure a loja.',reference:id});}
@@ -449,11 +501,11 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/admin/stats'&&method==='GET')return json(res,200,{products:(await db.prepare('SELECT COUNT(*) n FROM products').get()).n,photos:(await db.prepare("SELECT COUNT(*) n FROM products WHERE image<>''").get()).n,orders:(await db.prepare('SELECT COUNT(*) n FROM orders').get()).n,customers:(await db.prepare('SELECT COUNT(*) n FROM customers').get()).n,pending:(await db.prepare("SELECT COUNT(*) n FROM orders WHERE status IN ('pedido_criado','aguardando_confirmacao')").get()).n,outOfStock:(await db.prepare('SELECT COUNT(*) n FROM products WHERE stock=0 AND active=1').get()).n,visible:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n,categories:(await db.prepare('SELECT COUNT(*) n FROM categories').get()).n,vendizapConfigured:!!(conf('VENDIZAP_ID')&&conf('VENDIZAP_SECRET')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),blingConfigured:!!(conf('BLING_CLIENT_ID')&&conf('BLING_CLIENT_SECRET')),mercadoPagoConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL'))});
  if(route==='/api/admin/import-csv'&&method==='POST'){if(!rate(req,'import',4,3600000))return problem(res,429,'Limite de importações excedido');const raw=await bodyCsv(req);try{return json(res,200,await importIntoPg(db,raw,searchText,secureUrl))}catch(e){return problem(res,400,e.message)}}
  if(route==='/api/admin/products'&&method==='GET'){
- const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number.parseInt(u.searchParams.get('page'),10)||1));const where=q?'WHERE name ILIKE ? OR brand ILIKE ?':'',args=q?['%'+q+'%','%'+q+'%']:[];
+ const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number.parseInt(u.searchParams.get('page'),10)||1));const where=q?'WHERE name ILIKE ? OR brand ILIKE ? OR sku ILIKE ? OR id=?':'',args=q?['%'+q+'%','%'+q+'%','%'+q+'%',q]:[];
  return json(res,200,{total:(await db.prepare('SELECT COUNT(*) n FROM products '+where).get(...args)).n,products:(await db.prepare('SELECT * FROM products '+where+' ORDER BY name LIMIT 30 OFFSET ?').all(...args,(p-1)*30)),page:p});
  }
  if(route==='/api/admin/products'&&method==='POST'){
- const p=await validProduct(await body(req));p.id='custom-'+crypto.randomBytes(12).toString('hex');(await db.prepare('INSERT INTO products(id,name,price,description,category,brand,family,image,sku,stock,weight,width,height,length,active,search_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id,p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text));return json(res,201,{id:p.id});
+ const p=await validProduct(await body(req));p.id='custom-'+crypto.randomBytes(12).toString('hex');(await db.prepare('INSERT INTO products(id,name,price,description,category,brand,family,image,sku,stock,weight,width,height,length,active,search_text,stock_confirmed,shipping_confirmed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id,p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,p.stock_confirmed,p.shipping_confirmed));return json(res,201,{id:p.id});
  }
  const edit=route.match(/^\/api\/admin\/products\/([\w-]{5,80})$/);
  // Ocultar sem apagar fisicamente: preserva histórico e referências de pedidos.
@@ -462,7 +514,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   return removed.changes?json(res,200,{ok:true,archived:true}):problem(res,404,'Produto não encontrado');
  }
  if(edit&&method==='PUT'){
- if(!(await db.prepare('SELECT id FROM products WHERE id=?').get(edit[1])))return problem(res,404,'Produto não encontrado');const p=await validProduct(await body(req));(await db.prepare('UPDATE products SET name=?,price=?,description=?,category=?,brand=?,family=?,image=?,sku=?,stock=?,weight=?,width=?,height=?,length=?,active=?,search_text=? WHERE id=?').run(p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,edit[1]));return json(res,200,{ok:true});
+ if(!(await db.prepare('SELECT id FROM products WHERE id=?').get(edit[1])))return problem(res,404,'Produto não encontrado');const p=await validProduct(await body(req),edit[1]);(await db.prepare('UPDATE products SET name=?,price=?,description=?,category=?,brand=?,family=?,image=?,sku=?,stock=?,weight=?,width=?,height=?,length=?,active=?,search_text=?,stock_confirmed=?,shipping_confirmed=? WHERE id=?').run(p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,p.stock_confirmed,p.shipping_confirmed,edit[1]));return json(res,200,{ok:true});
  }
  if(route==='/api/admin/categories'&&method==='GET')return json(res,200,{categories:(await db.prepare('SELECT * FROM categories ORDER BY name').all())});
  if(route==='/api/admin/categories'&&method==='POST'){
@@ -512,7 +564,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
 const server=http.createServer({requestTimeout:30000,headersTimeout:15000,maxHeaderSize:16384},async(req,res)=>{
  security(res);
  if(!rate(req,'general',800,60000))return problem(res,429,'Limite de requisições');
- try{await ready;const u=new URL(req.url,'http://localhost');if(u.pathname.startsWith('/api/'))await api(req,res,u);else if(['GET','HEAD'].includes(req.method))await staticFile(req,res,u);else problem(res,405,'Método não permitido')}catch(e){if(process.env.NODE_ENV!=='production'&&!e.status)console.error(e);problem(res,e.status||500,e.status?e.message:'Erro interno. Tente novamente.')}
+ try{await ready;const u=new URL(req.url,'http://localhost');if(u.pathname.startsWith('/api/'))await api(req,res,u);else if(['GET','HEAD'].includes(req.method))await staticFile(req,res,u);else problem(res,405,'Método não permitido')}catch(e){if(process.env.NODE_ENV!=='production'&&!e.status)console.error(e);problem(res,e.code==='23505'?409:e.status||500,e.code==='23505'?'SKU ou identificador já utilizado':e.status?e.message:'Erro interno. Tente novamente.')}
 });
 if(require.main===module){ready.then(()=>server.listen(Number(process.env.PORT)||3000,process.env.HOST||'0.0.0.0',()=>console.log('MAHACH PostgreSQL iniciado na porta '+(process.env.PORT||3000)))).catch(e=>{console.error('Falha na inicialização PostgreSQL:',e.message);process.exitCode=1;db.close().catch(()=>{})})}
 module.exports={server,db,ready,searchText};

@@ -7,6 +7,13 @@ function accessToken(conf){return String(conf('MERCADO_PAGO_ACCESS_TOKEN')||'').
 function paymentUrl(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&/(^|\.)mercadopago\.com(\.br)?$/.test(u.hostname)?u.href:null}catch{return null}}
 function configured(conf){return !!(accessToken(conf)&&conf('MERCADO_PAGO_WEBHOOK_SECRET')&&httpsSite(conf('PUBLIC_SITE_URL')))}
 function htmlesc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function getPreference(conf,id){
+ if(!/^[a-zA-Z0-9_-]{1,150}$/.test(String(id)))throw Object.assign(Error('Preferência inválida'),{status:400});
+ const response=await fetch(MP+'/checkout/preferences/'+encodeURIComponent(id),{headers:{Authorization:'Bearer '+accessToken(conf),Accept:'application/json'},signal:AbortSignal.timeout(15000)});
+ const data=await response.json().catch(()=>({})),url=paymentUrl(data.init_point);
+ if(!response.ok||!url)throw Object.assign(Error('Não foi possível recuperar o checkout de cartão'),{status:502});
+ return {preferenceId:String(data.id),checkoutUrl:url};
+}
 async function createPreference(conf,order,items,token){
  if(!configured(conf))throw Object.assign(new Error('Mercado Pago indisponível: configure Access Token, URL HTTPS e segredo do Webhook no painel.'),{status:503});
  const origin=httpsSite(conf('PUBLIC_SITE_URL'));
@@ -82,4 +89,4 @@ async function sendEmail(conf,to,subject,html){
  if(!result||typeof result.id!=='string'||!result.id)return {ok:false,reason:'Provedor não confirmou o identificador da mensagem'};
  return {ok:true,providerId:result.id};
 }
-module.exports={accessToken,paymentUrl,cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};
+module.exports={getPreference,accessToken,paymentUrl,cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};

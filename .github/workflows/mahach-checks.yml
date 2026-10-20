@@ -13,6 +13,20 @@ jobs:
   offline:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: mahach_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,5 +57,9 @@ jobs:
         run: node scripts/test-pix-checkout.cjs
       - name: Public page structure
         run: node scripts/testar-publicacao.cjs
+      - name: PostgreSQL transactions and checkout (disposable database)
+        env:
+          MAHACH_CI_DATABASE_URL: postgresql://test:test-only@127.0.0.1:5432/mahach_ci
+        run: node scripts/test-integration-postgres.cjs
       - name: Dependency security
         run: npm audit --omit=dev --audit-level=high
