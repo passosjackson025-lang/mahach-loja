@@ -69,93 +69,173 @@
 @media(max-width:700px){.checkout-dialog{width:calc(100vw - 12px)!important;border-radius:12px!important;max-height:calc(100dvh - 10px)!important}.checkout-dialog .checkout-head{padding:20px 18px!important}.checkout-dialog .checkout-body{padding:18px 16px calc(28px + env(safe-area-inset-bottom))!important}.checkout-dialog .checkout-steps span{font-size:9px;line-height:1.4}.checkout-dialog .checkout-head h2{font-size:30px!important}.checkout-dialog .checkout-fields,.checkout-dialog .checkout-options{grid-template-columns:1fr}.checkout-dialog #checkoutForm>.checkout-fields{gap:12px}.checkout-dialog #checkoutForm>fieldset legend{font-size:21px!important}.checkout-dialog .checkout-summary{padding:15px}.checkout-dialog .mahach-pix{padding:15px}.checkout-dialog .mahach-pix button{display:flex;width:100%;margin:8px 0}.checkout-dialog #orderSuccess h3{font-size:29px!important}}
 @media(prefers-reduced-motion:reduce){.checkout-dialog *{scroll-behavior:auto!important;transition:none!important}}
 
-/* MAHACH V6: design editorial de checkout, 2 paineis, inspirado na referencia do cliente. */
-.checkout-dialog.mahach-split{--mahach-gold:#c99e60;--mahach-dark:#25211f;--mahach-paper:#fbfaf7;width:min(1210px,calc(100vw - 36px))!important;max-height:calc(100dvh - 28px)!important;padding:0!important;position:relative!important;overflow-y:auto!important;background:linear-gradient(to right,var(--mahach-paper) 0 65%,var(--mahach-dark) 65% 100%)!important;border:1px solid #302c2a!important;border-radius:17px!important;box-shadow:0 28px 85px #0006!important;scrollbar-gutter:auto}
-.checkout-dialog.mahach-split .checkout-head{box-sizing:border-box!important;width:65%;background:transparent!important;border:0!important;padding:32px 34px 10px!important;position:static!important}
-.checkout-dialog.mahach-split .checkout-head h2{font-family:Georgia,serif!important;font-size:clamp(32px,3.5vw,48px)!important;line-height:1.08!important;margin:10px 0 6px!important}
-.checkout-dialog.mahach-split .checkout-head>button{position:absolute!important;right:20px;top:18px;z-index:5;background:#3d3734!important;color:#fff!important;border-color:#675b51!important;font-size:23px}
-.checkout-dialog.mahach-split .checkout-head>button:hover{background:#534738!important}
-.checkout-dialog.mahach-split .checkout-body{padding:0!important}
-.checkout-dialog.mahach-split .checkout-steps,.checkout-dialog.mahach-split .checkout-intro{box-sizing:border-box;width:65%;padding-left:34px;padding-right:34px}
-.checkout-dialog.mahach-split .checkout-steps{gap:9px;margin:6px 0 16px;padding-top:7px;padding-bottom:9px}
-.checkout-dialog.mahach-split .checkout-steps span{font-size:10px;border-color:#e8e1d6;padding:8px 0 12px}
-.checkout-dialog.mahach-split .checkout-steps span:first-child{border-color:var(--mahach-gold);color:#4f3623}
-.checkout-dialog.mahach-split .checkout-intro{font-size:12px;margin:0 0 17px}
-.checkout-dialog.mahach-split #checkoutForm{display:block!important;position:relative!important;min-height:580px}
-.checkout-dialog.mahach-split .mahach-checkout-main{box-sizing:border-box;width:65%;padding:0 34px 28px}
-.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>.checkout-fields{gap:12px;grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:16px}
-.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>.checkout-fields::before{content:'01  ·  Dados para sua compra';color:#302922;font-size:13px;letter-spacing:.01em;font-weight:700}
-.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset{border:0!important;border-top:1px solid #e9e1d7!important;margin-bottom:15px!important;padding:18px 0 0!important}
-.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset legend{font:600 20px/1.3 Georgia,serif!important;margin-bottom:10px}
-.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset legend::before{width:25px;height:25px;font-size:11px;color:white;background:#312721;border:0}
-.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>.mahach-delivery legend::before{content:'02'}
-.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>.mahach-payment legend::before{content:'04'}
-.checkout-dialog.mahach-split .mahach-address-title{font:600 18px Georgia,serif;margin:0 0 12px}
-.checkout-dialog.mahach-split #deliveryAddress{padding:17px!important;border-radius:10px!important;margin:0 0 17px!important}
-.checkout-dialog.mahach-split #deliveryAddress .checkout-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.checkout-dialog.mahach-split .checkout-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px!important}
-.checkout-dialog.mahach-split .checkout-options>label{min-height:72px!important;position:relative;flex-wrap:wrap!important;align-content:center;gap:4px 9px!important;font-weight:700!important;font-size:12px!important;border-radius:9px!important}
-.checkout-dialog.mahach-split .checkout-options>label small{flex-basis:100%;padding-left:26px;line-height:1.2;color:#7c736a;font:11px Arial,sans-serif}
-.checkout-dialog.mahach-split .checkout-options>label:has(input:checked){background:#faf3e9!important;border-color:#bb996f!important}
-.checkout-dialog.mahach-split .checkout-options>label input{width:17px;height:17px}
-.checkout-dialog.mahach-split #paymentOptions #pixCpfArea:not([hidden]){margin:0!important;border:1px solid #e1d5c4;background:#f7f2ea}
-.checkout-dialog.mahach-split #shippingResults label{min-height:51px!important}
-.checkout-dialog.mahach-split .checkout-notice{margin:8px 0 18px}
-.checkout-dialog.mahach-split .mahach-checkout-side{box-sizing:border-box;position:absolute;top:-186px;right:0;width:35%;color:#fbf7ef;padding:30px clamp(20px,2.5vw,32px) 36px;min-height:620px;background:transparent}
-.checkout-dialog.mahach-split .mahach-side-label{font:600 10px/1.4 Arial,sans-serif;letter-spacing:.22em;color:#d7b78d;padding:0 0 14px}
-.checkout-dialog.mahach-split .mahach-side-top{border-bottom:1px solid #594d43;padding:14px 0 17px;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:7px}
-.checkout-dialog.mahach-split .mahach-side-top h3{font:400 28px/1.2 Georgia,serif;color:#fff;margin:0}
-.checkout-dialog.mahach-split .mahach-side-top p{font:12px Arial,sans-serif;color:#d9c8b8;margin:0}
-.checkout-dialog.mahach-split .mahach-summary-products{display:grid;gap:15px;margin:20px 0;padding-bottom:20px;border-bottom:1px solid #594d43;max-height:290px;overflow-y:auto}
-.checkout-dialog.mahach-split .mahach-summary-product{display:grid;grid-template-columns:58px minmax(0,1fr) auto;align-items:center;gap:12px}
-.checkout-dialog.mahach-split .mahach-product-thumbnail{width:58px;height:64px;background:#e9dfd2;border-radius:8px;color:#9b784e;display:grid;place-items:center;font:30px Georgia,serif;overflow:hidden}
-.checkout-dialog.mahach-split .mahach-product-thumbnail img{width:100%;height:100%;object-fit:cover}
-.checkout-dialog.mahach-split .mahach-product-detail{display:grid;gap:7px;min-width:0}
-.checkout-dialog.mahach-split .mahach-product-detail strong{font:600 12px/1.4 Arial,sans-serif;overflow-wrap:anywhere;color:#f8efe5}
-.checkout-dialog.mahach-split .mahach-product-detail small{font:11px Arial,sans-serif;color:#b7a697}
-.checkout-dialog.mahach-split .mahach-summary-product b{font:600 12px Arial,sans-serif;white-space:nowrap;color:#e7be83}
-.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary{margin:0 0 17px!important;padding:0!important;background:transparent!important;border:0!important;color:#e5dcd0!important}
-.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary-row{font-size:12px;color:#d1bfb0;gap:10px}
-.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary-row strong{color:#f4ece2;font-size:13px}
-.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary-row.total{border-top:1px solid #5a4b3d;padding-top:19px;margin-top:10px;color:#fff;font:600 17px Georgia,serif}
-.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary-row.total strong{font:400 26px Georgia,serif;color:#f0c383}
-.checkout-dialog.mahach-split #submitOrder{background:linear-gradient(110deg,#eacb9b,#cca06a)!important;color:#251b15!important;border:0!important;min-height:58px!important;font-size:13px!important;letter-spacing:.015em!important}
-.checkout-dialog.mahach-split #submitOrder:hover:not([disabled]){background:linear-gradient(110deg,#f0d6aa,#d8a978)!important}
-.checkout-dialog.mahach-split .mahach-side-safe{font:11px/1.6 Arial,sans-serif;color:#c5b4a5;margin:12px 0 25px;text-align:center}
-.checkout-dialog.mahach-split .mahach-side-perks{display:grid;gap:14px;border-top:1px solid #5a4b3d;padding-top:21px}
-.checkout-dialog.mahach-split .mahach-side-perks p{display:flex;align-items:center;gap:11px;color:#dbccbd;font:12px/1.5 Arial,sans-serif;margin:0}
-.checkout-dialog.mahach-split .mahach-side-perks span{color:#e6be83;font-size:20px;width:25px;flex-shrink:0}
-.checkout-dialog.mahach-split #orderSuccess{box-sizing:border-box;width:65%;padding:14px 34px 42px!important;min-height:420px}
-.checkout-dialog.mahach-split:has(#orderSuccess:not([hidden])){background:#fcfaf6!important}
-.checkout-dialog.mahach-split:has(#orderSuccess:not([hidden])) .checkout-head{width:100%;border-bottom:1px solid #e5dccc!important}
-.checkout-dialog.mahach-split:has(#orderSuccess:not([hidden])) .checkout-head>button{color:#3f352b!important;background:white!important;border-color:#ded3c6!important}
-.checkout-dialog.mahach-split:has(#orderSuccess:not([hidden])) #orderSuccess{width:min(750px,100%);margin:auto}
+/* MAHACH V7 — tipografia consistente, colunas de verdade e estados de visibilidade. */
+.checkout-dialog.mahach-split{
+ --mahach-paper:#fbfaf7;--mahach-dark:#25211f;--mahach-gold:#c99e60;
+ box-sizing:border-box;width:min(1180px,calc(100vw - 28px))!important;
+ max-height:calc(100dvh - 30px)!important;padding:0!important;
+ overflow-y:auto!important;overflow-x:hidden!important;position:relative!important;
+ background:var(--mahach-paper)!important;border:1px solid #51453c!important;
+ border-radius:15px!important;box-shadow:0 28px 90px rgba(0,0,0,.38)!important;
+ scrollbar-gutter:auto;overscroll-behavior:contain;
+}
+.checkout-dialog.mahach-split *, .checkout-dialog.mahach-split *::before, .checkout-dialog.mahach-split *::after{box-sizing:border-box}
+.checkout-dialog.mahach-split .mahach-shell{
+ display:grid;grid-template-columns:minmax(0,1.7fr) minmax(315px,1fr);
+ align-items:stretch;min-height:100%;background:var(--mahach-paper);
+}
+.checkout-dialog.mahach-split .mahach-shell-light{min-width:0;min-height:0;background:var(--mahach-paper)}
+.checkout-dialog.mahach-split .mahach-shell:has(.mahach-checkout-side[hidden]){grid-template-columns:minmax(0,1fr)}
+.checkout-dialog.mahach-split.mahach-preview .mahach-shell,
+.checkout-dialog.mahach-split.mahach-success .mahach-shell{grid-template-columns:minmax(0,1fr)}
+/* No override de display pode reexibir um form oculto ou um resumo de pedido antigo. */
+#checkoutDialog.mahach-split #checkoutForm[hidden],
+#checkoutDialog.mahach-split .mahach-checkout-side[hidden],
+#checkoutDialog.mahach-split #orderSuccess[hidden],
+#checkoutDialog.mahach-split #checkoutPreviewNotice[hidden]{display:none!important}
+.checkout-dialog.mahach-split .checkout-head{
+ width:100%!important;position:static!important;display:flex!important;align-items:flex-start!important;
+ padding:26px 32px 14px!important;background:transparent!important;border:0!important;
+}
+.checkout-dialog.mahach-split .checkout-head h2{
+ font:400 clamp(29px,3vw,39px)/1.12 Georgia,serif!important;
+ letter-spacing:-.035em!important;margin:7px 0 7px!important;overflow-wrap:break-word;
+}
+.checkout-dialog.mahach-split .checkout-head .checkout-head-sub{font:12px/1.6 Arial,sans-serif!important;margin:0;color:#796b5c}
+.checkout-dialog.mahach-split .checkout-head>button{
+ position:absolute!important;top:17px;right:16px;z-index:20;
+ min-width:42px;min-height:42px;background:#40352d!important;color:#fff!important;
+ border:1px solid #766657!important;font-size:21px;cursor:pointer;
+}
+.checkout-dialog.mahach-split .checkout-body{padding:0 32px 32px!important;min-width:0!important}
+.checkout-dialog.mahach-split .checkout-steps,
+.checkout-dialog.mahach-split .checkout-intro{width:100%;padding-inline:0!important}
+.checkout-dialog.mahach-split .checkout-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:5px 0 15px!important;padding:0 0 7px!important}
+.checkout-dialog.mahach-split .checkout-steps span{font:600 10px/1.5 Arial,sans-serif;color:#84796c;min-width:0;border-bottom:2px solid #e3dace;padding:7px 0 10px!important}
+.checkout-dialog.mahach-split .checkout-steps span:first-child{color:#644a30;border-color:#b58b55}
+.checkout-dialog.mahach-split .checkout-intro{font:12px/1.6 Arial,sans-serif!important;color:#75695c;margin:0 0 18px!important}
+.checkout-dialog.mahach-split #checkoutForm{display:block!important;position:static!important;width:100%;min-height:0!important}
+.checkout-dialog.mahach-split .mahach-checkout-main{width:100%;padding:0!important;min-width:0}
+.checkout-dialog.mahach-split #checkoutForm .checkout-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px!important}
+.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>.checkout-fields{margin:0 0 23px!important}
+.checkout-dialog.mahach-split #checkoutForm .checkout-fields::before{content:none!important;display:none!important}
+/* 01 Dados, 02 Entrega, 03 Endereço opcional, 03/04 Pagamento usam a mesma régua tipográfica. */
+.checkout-dialog.mahach-split .mahach-section-heading,
+.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset legend{
+ font:600 17px/1.35 Arial,sans-serif!important;letter-spacing:-.02em!important;
+ color:#302922!important;margin:0 0 15px!important;padding:0!important;
+ min-width:0;max-width:100%;white-space:normal;
+}
+.checkout-dialog.mahach-split .mahach-section-heading{display:flex;align-items:center;gap:10px;grid-column:1/-1}
+.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset legend{display:block!important;width:100%!important;float:none!important}
+.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset legend::before{content:none!important;display:none!important}
+.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset legend>span{vertical-align:middle}
+.checkout-dialog.mahach-split .mahach-section-index{
+ display:inline-flex;justify-content:center;align-items:center;flex:none;
+ width:28px;height:28px;border-radius:50%;margin:0 10px 0 0;
+ background:#302922;color:#fff;font:700 11px/1 Arial,sans-serif;
+ letter-spacing:0;vertical-align:middle;
+}
+.checkout-dialog.mahach-split .mahach-section-heading .mahach-section-index{margin:0}
+.checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset{
+ min-width:0;border:0!important;border-top:1px solid #e8dfd5!important;
+ padding:21px 0 0!important;margin:0 0 22px!important;
+}
+.checkout-dialog.mahach-split #checkoutForm label{font:500 12px/1.55 Arial,sans-serif!important;min-width:0}
+.checkout-dialog.mahach-split #checkoutForm input:not([type=radio]):not([type=checkbox]){
+ width:100%;min-height:43px;font:14px/1.4 Arial,sans-serif!important;
+ background:#fff!important;color:#302922!important;padding:10px 12px!important;
+ border:1px solid #d9cfc3!important;border-radius:8px!important;
+}
+.checkout-dialog.mahach-split #checkoutForm input:focus-visible,
+.checkout-dialog.mahach-split button:focus-visible{outline:2px solid #b18c5c;outline-offset:3px}
+.checkout-dialog.mahach-split .checkout-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px!important}
+.checkout-dialog.mahach-split .checkout-options>label{
+ display:flex!important;align-items:center!important;flex-wrap:wrap!important;
+ min-width:0;min-height:61px!important;gap:3px 9px!important;
+ padding:11px 12px!important;font:600 12px/1.35 Arial,sans-serif!important;
+ background:#fff!important;border:1px solid #dfd5c9!important;border-radius:9px!important;
+ cursor:pointer;
+}
+.checkout-dialog.mahach-split .checkout-options>label small{
+ flex-basis:100%;padding-left:26px;color:#777066;font:11px/1.45 Arial,sans-serif!important;
+}
+.checkout-dialog.mahach-split .checkout-options>label:has(input:checked){background:#f6eee3!important;border-color:#a78459!important}
+.checkout-dialog.mahach-split .checkout-options input[type=radio]{flex:none;width:17px;height:17px}
+.checkout-dialog.mahach-split #deliveryAddress{padding:17px!important;border-radius:10px!important;margin:0 0 20px!important;min-width:0}
+.checkout-dialog.mahach-split #deliveryAddress .mahach-address-title{margin:0 0 14px!important}
+.checkout-dialog.mahach-split #shippingResults label{min-height:48px!important;border-radius:8px!important}
+.checkout-dialog.mahach-split #paymentOptions #pixCpfArea:not([hidden]){grid-column:1/-1;display:block!important;margin:0!important;padding:14px!important;border:1px solid #e5dacc!important;background:#f9f4ec!important}
+.checkout-dialog.mahach-split .checkout-notice{margin:0 0 17px!important}
+.checkout-dialog.mahach-split .checkout-marketing{display:flex!important}
+/* Painel escuro ocupa sua coluna no fluxo; sem posição absoluta ou top negativo. */
+.checkout-dialog.mahach-split .mahach-checkout-side{
+ width:auto!important;min-width:0;min-height:100%;position:static!important;top:auto!important;right:auto!important;
+ align-self:stretch;display:block;padding:32px 26px 30px!important;
+ color:#f5efe5;background:var(--mahach-dark)!important;
+}
+.checkout-dialog.mahach-split .mahach-side-top{
+ display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:6px 10px;
+ padding:0 0 16px!important;border-bottom:1px solid #5a4f47;
+}
+.checkout-dialog.mahach-split .mahach-side-label{
+ grid-column:1/-1;padding:0 0 8px!important;
+ font:600 9px/1.4 Arial,sans-serif;letter-spacing:.16em;color:#d7b78d;
+}
+.checkout-dialog.mahach-split .mahach-side-top h3{margin:0!important;color:#fff;font:400 25px/1.2 Georgia,serif!important}
+.checkout-dialog.mahach-split .mahach-side-top p{margin:0!important;font:11px Arial,sans-serif!important;color:#d0c2b4}
+.checkout-dialog.mahach-split .mahach-summary-products{display:grid;gap:13px;margin:18px 0;padding-bottom:17px;max-height:320px;overflow-y:auto;border-bottom:1px solid #5a4f47}
+.checkout-dialog.mahach-split .mahach-summary-product{display:grid;grid-template-columns:54px minmax(0,1fr);align-items:center;gap:5px 11px;min-width:0}
+.checkout-dialog.mahach-split .mahach-product-thumbnail{grid-row:1/3;width:54px;height:60px;background:#ded6cc}
+.checkout-dialog.mahach-split .mahach-product-detail{display:grid;gap:5px;min-width:0}
+.checkout-dialog.mahach-split .mahach-product-detail strong{font:600 12px/1.45 Arial,sans-serif;color:#f7eee2;overflow-wrap:anywhere}
+.checkout-dialog.mahach-split .mahach-product-detail small{font:11px Arial,sans-serif;color:#d1bdac}
+.checkout-dialog.mahach-split .mahach-summary-product b{grid-column:2;justify-self:end;color:#e7be83;font:600 12px Arial,sans-serif}
+.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary{padding:0!important;background:transparent!important;border:0!important;color:#fff!important;margin:0 0 20px!important}
+.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary-row{font:12px/1.45 Arial,sans-serif;color:#d7c4b2;gap:10px;min-width:0}
+.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary-row strong{color:#f4eee8;font:600 13px Arial,sans-serif;text-align:right;overflow-wrap:anywhere}
+.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary-row.total{border-top:1px solid #5a4f47!important;padding:15px 0 0!important;margin:5px 0 0!important;color:#fff;font:600 15px Georgia,serif}
+.checkout-dialog.mahach-split .mahach-checkout-side .checkout-summary-row.total strong{color:#e8bc7d;font:400 25px Georgia,serif}
+.checkout-dialog.mahach-split #submitOrder{width:100%;min-height:52px!important;font:600 13px Arial,sans-serif!important;background:#e4be89!important;color:#272019!important;border:0!important}
+.checkout-dialog.mahach-split #submitOrder:hover:not([disabled]){background:#f0d09e!important}
+.checkout-dialog.mahach-split .mahach-side-safe{color:#d0bdab;font:11px/1.6 Arial,sans-serif;text-align:center}
+.checkout-dialog.mahach-split .mahach-side-perks{display:grid;gap:11px;border-top:1px solid #5a4f47;padding-top:18px}
+.checkout-dialog.mahach-split .mahach-side-perks p{display:flex;align-items:center;gap:11px;margin:0;font:12px/1.4 Arial,sans-serif;color:#ddcec0}
+.checkout-dialog.mahach-split .mahach-side-perks span{color:#d9b17b;font-size:18px;flex:0 0 21px}
+/* Aviso ocupa toda a largura disponível no painel claro, nunca passa sobre o escuro. */
+.checkout-dialog.mahach-split #checkoutPreviewNotice{
+ display:block;max-width:100%;overflow-wrap:anywhere;white-space:normal;
+ margin:18px 0!important;padding:17px 18px!important;
+ border:1px solid #d8c9b5!important;background:#f9f4e9;border-radius:10px!important;
+ color:#54483b;font:13px/1.65 Arial,sans-serif;
+}
+.checkout-dialog.mahach-split.mahach-preview .checkout-intro,
+.checkout-dialog.mahach-split.mahach-preview .checkout-steps{display:none!important}
+.checkout-dialog.mahach-split #orderSuccess{padding:14px 0 24px!important;width:100%!important;min-height:0!important;max-width:700px}
+.checkout-dialog.mahach-split.mahach-success .checkout-body{padding-bottom:28px!important}
 @media(max-width:900px){
- .checkout-dialog.mahach-split{width:calc(100vw - 16px)!important;background:#fbfaf7!important;border-radius:11px!important}
- .checkout-dialog.mahach-split .checkout-head,.checkout-dialog.mahach-split .checkout-steps,.checkout-dialog.mahach-split .checkout-intro{width:100%!important}
- .checkout-dialog.mahach-split .checkout-head{padding:24px 23px 12px!important}
- .checkout-dialog.mahach-split .checkout-head>button{top:15px;right:16px;color:#312921!important;background:#faf7f2!important;border-color:#e3d9cb!important}
- .checkout-dialog.mahach-split .checkout-head h2{font-size:34px!important;padding-right:30px}
- .checkout-dialog.mahach-split .checkout-steps,.checkout-dialog.mahach-split .checkout-intro{padding-inline:23px!important}
- .checkout-dialog.mahach-split .mahach-checkout-main{width:100%;padding:0 23px 22px}
- .checkout-dialog.mahach-split #checkoutForm{display:flex!important;flex-direction:column}
- .checkout-dialog.mahach-split .mahach-checkout-side{width:100%;position:static;padding:29px 23px 34px;background:var(--mahach-dark);min-height:0}
- .checkout-dialog.mahach-split .mahach-side-label{padding:0 0 5px}
- .checkout-dialog.mahach-split #orderSuccess{width:100%;padding:17px 23px 38px!important}
+ .checkout-dialog.mahach-split{width:calc(100vw - 14px)!important;max-height:calc(100dvh - 14px)!important;border-radius:11px!important}
+ .checkout-dialog.mahach-split .mahach-shell{display:flex;flex-direction:column}
+ .checkout-dialog.mahach-split .checkout-head{padding:21px 22px 13px!important}
+ .checkout-dialog.mahach-split .checkout-head h2{font-size:32px!important;padding-right:29px}
+ .checkout-dialog.mahach-split .checkout-body{padding:0 22px 24px!important}
+ .checkout-dialog.mahach-split .mahach-checkout-side{min-height:0;padding:25px 22px 30px!important}
+ .checkout-dialog.mahach-split .mahach-summary-products{max-height:250px}
 }
-@media(max-width:600px){
+@media(max-width:560px){
  .checkout-dialog.mahach-split{width:calc(100vw - 10px)!important;max-height:calc(100dvh - 10px)!important}
- .checkout-dialog.mahach-split .checkout-head{padding:20px 18px 10px!important}
- .checkout-dialog.mahach-split .checkout-steps,.checkout-dialog.mahach-split .checkout-intro{padding-inline:18px!important}
- .checkout-dialog.mahach-split .checkout-steps{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+ .checkout-dialog.mahach-split .checkout-head{padding:20px 17px 13px!important}
+ .checkout-dialog.mahach-split .checkout-head h2{font-size:29px!important}
+ .checkout-dialog.mahach-split .checkout-body{padding:0 17px 22px!important}
+ .checkout-dialog.mahach-split .checkout-steps{gap:4px}
  .checkout-dialog.mahach-split .checkout-steps span{font-size:9px}
- .checkout-dialog.mahach-split .mahach-checkout-main{padding:0 18px 20px}
- .checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>.checkout-fields,.checkout-dialog.mahach-split #deliveryAddress .checkout-fields{grid-template-columns:1fr}
- .checkout-dialog.mahach-split .checkout-options{grid-template-columns:1fr}
- .checkout-dialog.mahach-split .checkout-options>label{min-height:59px!important}
- .checkout-dialog.mahach-split .mahach-checkout-side{padding:27px 19px 35px}
- .checkout-dialog.mahach-split .mahach-summary-product{grid-template-columns:48px minmax(0,1fr);gap:10px}
- .checkout-dialog.mahach-split .mahach-product-thumbnail{width:48px;height:58px}
- .checkout-dialog.mahach-split .mahach-summary-product b{grid-column:2}
- .checkout-dialog.mahach-split .checkout-head h2{font-size:30px!important}
+ .checkout-dialog.mahach-split #checkoutForm .checkout-fields{grid-template-columns:minmax(0,1fr)}
+ .checkout-dialog.mahach-split .checkout-options{grid-template-columns:minmax(0,1fr)}
+ .checkout-dialog.mahach-split .checkout-options>label{min-height:56px!important}
+ .checkout-dialog.mahach-split .mahach-checkout-side{padding:24px 17px 28px!important}
+ .checkout-dialog.mahach-split .mahach-section-heading,
+ .checkout-dialog.mahach-split #checkoutForm>.mahach-checkout-main>fieldset legend{font-size:16px!important}
+ .checkout-dialog.mahach-split .mahach-summary-product{grid-template-columns:50px minmax(0,1fr)}
+ .checkout-dialog.mahach-split .mahach-product-thumbnail{width:50px;height:56px}
 }
+@media(prefers-reduced-motion:reduce){.checkout-dialog.mahach-split *{animation:none!important;transition:none!important}}

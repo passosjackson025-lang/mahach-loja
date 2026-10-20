@@ -2,19 +2,20 @@
 // MAHACH Checkout. Os dados do cartão NÃO passam por este site.
 (function(){
  const markup=`<dialog class="checkout-dialog mahach-split" id="checkoutDialog" aria-labelledby="checkoutTitle">
+ <div class="mahach-shell"><div class="mahach-shell-light">
  <div class="checkout-head"><div><span class="eyebrow">MAHACH · SUA COMPRA</span><h2 id="checkoutTitle">Finalizar compra.</h2><p class="checkout-head-sub">Perfumaria selecionada, compra com segurança.</p></div><button type="button" data-checkout-close aria-label="Fechar">×</button></div>
- <div class="checkout-body"><div class="checkout-steps" aria-label="Etapas"><span>1 · Dados</span><span>2 · Entrega</span><span>3 · Pagamento</span><span>4 · Resumo</span></div>
+ <div class="checkout-body"><div class="checkout-steps" aria-label="Etapas"><span>Dados</span><span>Entrega</span><span>Pagamento</span><span>Resumo</span></div>
  <p class="checkout-intro">Confira seus dados, a entrega e o pagamento. No Pix, o QR Code aparece após registrar o pedido.</p>
  <form id="checkoutForm" class="mahach-checkout-layout">
   <div class="mahach-checkout-main">
-  <div class="checkout-fields"><label>Seu nome completo<input name="name" autocomplete="name" minlength="3" maxlength="120" required></label><label>WhatsApp com DDD<input name="phone" autocomplete="tel" inputmode="tel" pattern="[0-9()+\\s-]{10,20}" placeholder="(11) 99999-9999" required></label><label>E-mail para confirmação do pedido<input type="email" name="email" autocomplete="email" maxlength="200" required></label></div>
-  <fieldset class="mahach-delivery"><legend>Tipo de entrega</legend><div class="checkout-options">
+  <div class="checkout-fields"><h3 class="mahach-section-heading"><span class="mahach-section-index" aria-hidden="true">01</span><span>Dados para sua compra</span></h3><label>Seu nome completo<input name="name" autocomplete="name" minlength="3" maxlength="120" required></label><label>WhatsApp com DDD<input name="phone" autocomplete="tel" inputmode="tel" pattern="[0-9()+\\s-]{10,20}" placeholder="(11) 99999-9999" required></label><label>E-mail para confirmação do pedido<input type="email" name="email" autocomplete="email" maxlength="200" required></label></div>
+  <fieldset class="mahach-delivery"><legend><span class="mahach-section-index" aria-hidden="true">02</span><span>Tipo de entrega</span></legend><div class="checkout-options">
    <label><input type="radio" name="delivery" value="pickup" checked> Retirar na loja <small>Sem frete</small></label>
    <label><input type="radio" name="delivery" value="transportadora"> Transportadora <small>Calcular frete</small></label>
    <label><input type="radio" name="delivery" value="uber"> Uber <small>Corrida à parte</small></label>
    <label><input type="radio" name="delivery" value="99"> 99Entrega <small>Corrida à parte</small></label>
   </div></fieldset>
-  <div id="deliveryAddress" hidden><h3 class="mahach-address-title">Endereço para entrega</h3><div class="checkout-fields">
+  <div id="deliveryAddress" hidden><h3 class="mahach-section-heading mahach-address-title"><span class="mahach-section-index" aria-hidden="true">03</span><span>Endereço para entrega</span></h3><div class="checkout-fields">
    <label>CEP de entrega<input name="cep" inputmode="numeric" autocomplete="postal-code" placeholder="00000-000" maxlength="9"></label>
    <label>Rua ou avenida<input name="street" autocomplete="address-line1" maxlength="95" placeholder="Preenchida automaticamente pelo CEP"></label>
    <label>Numero do imovel<input name="addressNumber" inputmode="text" maxlength="15" placeholder="Ex.: 123"></label>
@@ -25,7 +26,7 @@
    <input type="hidden" name="address">
   </div><p id="cepLookupStatus" class="shipping-choice" role="status" aria-live="polite"></p>
    <button class="quote-button" type="button" id="quoteShipping">Calcular frete</button><div id="shippingResults" aria-live="polite"></div><p class="shipping-choice" id="shippingSelection" role="status"></p></div>
-  <fieldset class="mahach-payment"><legend>Forma de pagamento</legend><div class="checkout-options" id="paymentOptions">
+  <fieldset class="mahach-payment"><legend><span class="mahach-section-index" id="mahachPaymentStepNumber" aria-hidden="true">03</span><span>Forma de pagamento</span></legend><div class="checkout-options" id="paymentOptions">
    <label><input type="radio" name="payment" value="pix" checked> Pix com QR Code <small>Sem sair do site</small></label>
   <div id="pixCpfArea" class="checkout-pix-cpf"><label>CPF do pagador (solicitado pelo Mercado Pago para o Pix)<input name="pixCpf" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="000.000.000-00"></label><small>Usado somente para gerar o Pix; a MAHACH nao armazena esse documento.</small></div>
    <label><input type="radio" name="payment" value="card"> Cartão de crédito <small>Via Mercado Pago</small></label>
@@ -36,14 +37,7 @@
   <p class="checkout-legal">Usaremos seus dados para processar o pedido, mesmo que você não aceite marketing. Consulte a <a href="/privacidade.html" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>. A MAHACH não recebe nem armazena os dados completos do cartão.</p>
   <p id="checkoutError" class="checkout-error" role="alert" hidden></p>
   </div>
-  <aside class="mahach-checkout-side" aria-label="Resumo do pedido">
-   <div class="mahach-side-top"><div class="mahach-side-label">MAHACH · SEU PEDIDO</div><h3>Seu pedido</h3><p id="mahachSummaryCount"></p></div>
-   <div id="mahachSummaryItems" class="mahach-summary-products"></div>
-   <div class="checkout-total checkout-summary" id="checkoutTotal" role="status" aria-live="polite"></div>
-   <button class="button" id="submitOrder" type="submit">Continuar para pagamento →</button>
-   <p class="mahach-side-safe">Pagamento processado pelo Mercado Pago. Dados do cartão não passam pela MAHACH.</p>
-   <div class="mahach-side-perks"><p><span aria-hidden="true">◇</span> Compra segura</p><p><span aria-hidden="true">↗</span> Acompanhe seu pedido</p><p><span aria-hidden="true">✦</span> O cuidado MAHACH em cada detalhe</p></div>
-  </aside>
+
  </form>
  <div id="orderSuccess" tabindex="-1" hidden><span class="order-eyebrow">MAHACH · ACOMPANHAMENTO</span><h3 id="orderHeading">Pedido registrado</h3><p id="orderReference"></p><p id="orderInstructions">Acompanhe seu pedido e aguarde as informacoes da loja.</p>
   <section id="orderPix" class="mahach-pix" hidden aria-label="Pagamento Pix">
@@ -56,13 +50,23 @@
    <p id="pixStatus" role="status" aria-live="polite">Aguardando confirmacao do Mercado Pago...</p>
   </section>
   <a id="orderTrack" class="consult-link" target="_blank" rel="noopener noreferrer">Acompanhar pedido</a></div>
+ </div></div>
+  <aside class="mahach-checkout-side" aria-label="Resumo do pedido">
+   <div class="mahach-side-top"><div class="mahach-side-label">MAHACH · SEU PEDIDO</div><h3>Seu pedido</h3><p id="mahachSummaryCount"></p></div>
+   <div id="mahachSummaryItems" class="mahach-summary-products"></div>
+   <div class="checkout-total checkout-summary" id="checkoutTotal" role="status" aria-live="polite"></div>
+   <button class="button" id="submitOrder" form="checkoutForm" type="submit">Continuar para pagamento →</button>
+   <p class="mahach-side-safe">Pagamento processado pelo Mercado Pago. Dados do cartão não passam pela MAHACH.</p>
+   <div class="mahach-side-perks"><p><span aria-hidden="true">◇</span> Compra segura</p><p><span aria-hidden="true">↗</span> Acompanhe seu pedido</p><p><span aria-hidden="true">✦</span> O cuidado MAHACH em cada detalhe</p></div>
+  </aside>
  </div></dialog>`;
  const pixCss=document.createElement('link');pixCss.rel='stylesheet';pixCss.href='/pix-checkout.css';document.head.appendChild(pixCss);
  document.body.insertAdjacentHTML('beforeend',markup);
  const d=document.getElementById('checkoutDialog'),form=document.getElementById('checkoutForm'),q=id=>document.getElementById(id);
  let items=[],checkoutEnabled=false,selectedQuote='',selectedCost=null,pickupAddress='',onlinePayments=false,pixPoll=null,activeOrder=null;
+ const side=d.querySelector('.mahach-checkout-side');
  const previewNotice=document.createElement('p');previewNotice.id='checkoutPreviewNotice';previewNotice.textContent='Estamos preparando a MAHACH para compras online. O catálogo está disponível, mas ainda não estamos recebendo pedidos ou pagamentos pelo site.';previewNotice.hidden=true;previewNotice.style.cssText='padding:1.25rem;line-height:1.6;margin:1rem;border:1px solid #ccbfa8;border-radius:10px';form.before(previewNotice);
- function syncAvailability(){if(!d.open)return;form.hidden=!checkoutEnabled;previewNotice.hidden=checkoutEnabled}
+ function syncAvailability(){if(!d.open)return;form.hidden=!checkoutEnabled;side.hidden=!checkoutEnabled;previewNotice.hidden=checkoutEnabled;d.classList.toggle('mahach-preview',!checkoutEnabled);}
  fetch('/api/store/status',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{checkoutEnabled=v?.checkoutEnabled===true;syncAvailability()}).catch(()=>{});
  fetch('/api/meta',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(x=>{pickupAddress=String(x?.pickupAddress||'');onlinePayments=x?.onlinePayments===true;refreshDelivery()}).catch(()=>{});
  d.querySelector('[data-checkout-close]').addEventListener('click',()=>d.close());
@@ -91,7 +95,7 @@
  }
  window.openCheckout=function(bag,map){
   if(pixPoll)clearInterval(pixPoll);pixPoll=null;activeOrder=null;
-  selectedQuote='';selectedCost=null;form.reset();clearTimeout(cepTimer);++cepRequest;q('cepLookupStatus').textContent='';
+  d.classList.remove('mahach-success');selectedQuote='';selectedCost=null;form.reset();clearTimeout(cepTimer);++cepRequest;q('cepLookupStatus').textContent='';
   q('orderPix').hidden=true;q('pixQrImage').hidden=true;q('pixQrImage').removeAttribute('src');q('pixCopyValue').value='';q('pixCopyLabel').hidden=true;q('pixUnavailableMessage').hidden=true;q('pixCopyButton').hidden=true;q('pixRetryButton').hidden=true;
   d.querySelector('.checkout-head-sub').hidden=false;q('checkoutTitle').textContent='Finalizar compra.';q('orderHeading').textContent='Pedido registrado';q('orderSuccess').hidden=true;d.querySelector('.checkout-steps').hidden=false;d.querySelector('.checkout-intro').hidden=false;
   items=Object.entries(bag).map(([id,qty])=>({id,qty,p:map.get(id)})).filter(x=>x.p);
@@ -110,6 +114,7 @@
  }
  function refreshDelivery(){
   const mode=form.elements.delivery.value,delivery=mode!=='pickup';
+  q('mahachPaymentStepNumber').textContent=delivery?'04':'03';
   q('deliveryAddress').hidden=!delivery;form.elements.cep.required=delivery;for(const name of ['street','addressNumber','neighborhood','city','state'])form.elements[name].required=delivery;
   q('quoteShipping').hidden=mode!=='transportadora';
   const cash=form.querySelector('[name="payment"][value="cash"]');cash.disabled=delivery;
@@ -179,7 +184,7 @@
  });
  function showRegisteredOrder(result){
   activeOrder={reference:result.reference,token:result.token};
-  form.hidden=true;q('orderSuccess').hidden=false;d.querySelector('.checkout-steps').hidden=true;d.querySelector('.checkout-intro').hidden=true;
+  form.hidden=true;side.hidden=true;d.classList.add('mahach-success');q('orderSuccess').hidden=false;d.querySelector('.checkout-steps').hidden=true;d.querySelector('.checkout-intro').hidden=true;
   d.querySelector('.checkout-head-sub').hidden=true;q('checkoutTitle').textContent='Acompanhar pedido';q('orderHeading').textContent=result.mode==='pix-retry'?'Pagamento ainda não gerado':result.mode==='pix'?'Aguardando pagamento Pix':'Pedido registrado';
   d.scrollTop=0;q('orderSuccess').focus({preventScroll:true});
   q('orderReference').textContent='Pedido: '+result.reference;
