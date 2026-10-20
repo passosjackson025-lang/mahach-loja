@@ -62,3 +62,22 @@ O checkout de cartão reaproveita a preferência persistida. Uma falha de rede a
 Nenhuma declaração de segurança absoluta, disponibilidade absoluta ou 100% funcionalidade foi feita.
 
 Referências verificadas: https://neon.com/docs/guides/backup-restore (snapshot US$ 0,09/GB-mês); https://render.com/docs/free; https://developers.cloudflare.com/fundamentals/reference/http-headers/; https://www.mercadopago.com.br/developers/pt/docs/checkout-api-payments/integration-test/make-test-purchase
+
+## Validação gratuita no Neon — atualização de 20/10/2026
+- Plano da organização confirmado pela API: Free. Franquia oficial consultada: 10 branches por projeto.
+- Cópia preservada, criada sem compute: mahach-reserva-pre-lancamento-20261020 (br-icy-term-b8xnabnk), a partir de production, LSN 0/282F8F8.
+- Ambiente isolado: mahach-homologacao-20261020 (br-royal-truth-b8f1l1rb), criado a partir da cópia preservada, com compute fixo de 0,25 CU. Usa os recursos incluídos no Free; nenhum plano alterado ou snapshot pago criado.
+- A primeira configuração de tempo de suspensão foi recusada pelo plano. A criação foi refeita sem alterar o tempo de suspensão imposto pelo Free.
+- Recuperação da cópia conferida nas sete tabelas por contagem e assinatura calculada dentro do banco: produtos 1771, categorias 3, pedidos 9, administradores 1, configurações 16, clientes 1 e sessões 1. Todas as assinaturas corresponderam às de produção no momento da conferência. Valores de credenciais e dados pessoais não foram exportados.
+- Migração 20261020-sale-validation.sql aplicada com sucesso SOMENTE na homologação.
+- Após a migração: 1771 produtos preservados, 1771 ativos, saldos inalterados; zero confirmações automáticas de estoque ou embalagem. As assinaturas dos campos originais das sete tabelas continuaram iguais.
+- A cópia fica no próprio projeto Neon e depende da mesma conta/projeto. Não substitui uma exportação externa independente; não houve troca da conexão do site.
+- CI do código 337667c9bba97ddc56a9f528f985b5adbb31feaa: offline/PostgreSQL/navegador e verificação pública aprovados (run 39486393257).
+- A tentativa de aplicar a migração em produção foi rejeitada pela revisão automática de aprovação, por exigir autorização específica após os testes isolados. Nenhuma instrução SQL dessa tentativa foi aplicada. Consulta posterior confirmou a ausência das três colunas em produção.
+- A PR continua sem merge, e o deploy de produção não foi alterado.
+
+### Operação concreta aguardando aprovação
+1. Aplicar em production o mesmo arquivo SQL já validado: adicionar stock_confirmed e shipping_confirmed em products, stock_reserved em orders (todas false por padrão) e o índice único para SKUs não vazios.
+2. Publicar a PR 1 somente com os testes aprovados. Não mudar planos, domínio, credenciais ou flags de liberação pública.
+3. Conferir o deploy Render e repetir a verificação pública somente por GET. Manter checkout público fechado para a homologação real.
+A liberação pública de pagamentos e qualquer cobrança real continuam fora dessa operação.
