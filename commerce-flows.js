@@ -48,7 +48,13 @@ async function createPixPayment(conf,order,cpf){
   'Content-Type':'application/json','Accept':'application/json','X-Idempotency-Key':key
  },body:JSON.stringify(body),signal:AbortSignal.timeout(18000)});
  const data=await res.json().catch(()=>({}));
- if(!res.ok||!/^\d+$/.test(String(data.id||'')))throw Object.assign(new Error('Mercado Pago nao conseguiu emitir o Pix (HTTP '+res.status+'). O pedido ficou pendente.'),{status:502});
+ if(!res.ok||!/^\d+$/.test(String(data.id||''))){
+  // Codigo tecnicamente util sem expor mensagem, CPF, token ou payload do provedor.
+  const cause=Array.isArray(data.cause)?data.cause.find(c=>/^[a-zA-Z0-9_-]{1,35}$/.test(String(c?.code||''))):null;
+  const safeCode=String(cause?.code||data.error||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,35).toUpperCase();
+  const diagnostic=('MP_HTTP_'+res.status+(safeCode?'_'+safeCode:'')).slice(0,85);
+  throw Object.assign(new Error('Mercado Pago não conseguiu gerar o Pix no momento.'),{status:502,diagnostic});
+ }
  return pixDetails(data);
 }
 function verifyMPWebhook(conf,req,url){

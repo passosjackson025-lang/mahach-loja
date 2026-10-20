@@ -288,10 +288,11 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    details=commerce.pixDetails(payment);
   }else{
    if(!commerce.validCPF(data.pixCpf))return problem(res,400,'Confira o CPF para gerar o Pix');
-   details=await commerce.createPixPayment(conf,o,data.pixCpf);
+   try{details=await commerce.createPixPayment(conf,o,data.pixCpf)}
+   catch(err){const diagnostic=String(err.diagnostic||'MP_UNAVAILABLE').slice(0,90);console.warn('[Pix MAHACH] retry failed: '+diagnostic);return json(res,502,{error:'O Mercado Pago ainda não gerou o Pix. Tente novamente para o mesmo pedido.',diagnostic});}
    await db.prepare("UPDATE orders SET mp_payment_id=? WHERE id=? AND (mp_payment_id='' OR mp_payment_id IS NULL)").run(details.paymentId,o.id);
   }
-  if(!details.qrCode||!details.qrCodeBase64)return problem(res,502,'Pix gerado, mas o QR Code ainda nao esta disponivel. Consulte novamente.');
+  if(!details.qrCode)return json(res,502,{error:'Pagamento identificado, mas o código Pix ainda não está disponível. Tente novamente para o mesmo pedido.',diagnostic:'MP_QR_PENDING'});
   return json(res,200,{paid:false,pix:details});
  }
  if(route==='/api/orders'&&method==='POST'){
@@ -349,10 +350,12 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
     pix=await commerce.createPixPayment(conf,order,pixCpf);
     await db.prepare("UPDATE orders SET mp_payment_id=? WHERE id=? AND (mp_payment_id IS NULL OR mp_payment_id='')").run(pix.paymentId,id);
    }catch(e){
-    // Entrega o token SOMENTE ao comprador para recuperar o mesmo Pix; nunca reenvie CPF.
-    return json(res,201,{reference:id,token,mode:'pix-retry',notice:'Pedido registrado, mas o Pix ainda nao foi exibido. Tente gerar o mesmo Pix novamente.'});
+    // Nunca registrar tokens, dados do pagador ou resposta bruta do provedor no log.
+    const diagnostic=String(e.diagnostic||'MP_UNAVAILABLE').slice(0,90);
+    console.warn('[Pix MAHACH] creation failed: '+diagnostic);
+    return json(res,201,{reference:id,token,mode:'pix-retry',diagnostic,notice:'Pedido registrado, mas o Mercado Pago ainda não gerou o Pix. Tente novamente para o mesmo pedido.'});
    }
-   if(!pix.qrCode||!pix.qrCodeBase64)return json(res,201,{reference:id,token,mode:'pix-retry',notice:'Pedido registrado. Aguarde e tente carregar novamente o QR Code.'});
+   if(!pix.qrCode)return json(res,201,{reference:id,token,mode:'pix-retry',diagnostic:'MP_QR_PENDING',notice:'Pedido registrado. Aguarde e tente consultar novamente o código Pix.'});
   }
   if(payment==='cash')await sendTransactional(id,'created');
   return json(res,201,{reference:id,token,mode:payment==='pix'?'pix':payment==='card'?'online':'pickup-cash',pix,checkoutUrl,
