@@ -83,7 +83,7 @@ async function getVerifiedPayment(conf,id){
 }
 async function sendEmail(conf,to,subject,html){
  const api=conf('RESEND_API_KEY'),from=conf('MAIL_FROM');if(!api||!from)return {ok:false,reason:'Serviço de e-mail não configurado'};
- const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+api,'Content-Type':'application/json'},body:JSON.stringify({from,to:[to],subject,html}),signal:AbortSignal.timeout(12000)});
+ const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+api,'Content-Type':'application/json','Idempotency-Key':crypto.createHash('sha256').update(JSON.stringify(['MAHACH',to,subject,html])).digest('hex')},body:JSON.stringify({from,to:[to],subject,html}),signal:AbortSignal.timeout(12000)});
  if(!r.ok)return {ok:false,reason:'Serviço de e-mail respondeu HTTP '+r.status};
  const result=await r.json().catch(()=>null);
  if(!result||typeof result.id!=='string'||!result.id)return {ok:false,reason:'Provedor não confirmou o identificador da mensagem'};

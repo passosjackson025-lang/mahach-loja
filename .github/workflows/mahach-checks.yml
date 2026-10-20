@@ -1,7 +1,5 @@
 name: MAHACH checks
 on:
-  push:
-    branches: [codex/preparacao-lancamento]
   pull_request:
     branches: [main]
 permissions:
@@ -12,7 +10,7 @@ concurrency:
 jobs:
   offline:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:18
@@ -57,8 +55,14 @@ jobs:
         run: node scripts/test-pix-checkout.cjs
       - name: Public page structure
         run: node scripts/testar-publicacao.cjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix /tmp/mahach-browser --no-audit --no-fund playwright@1.64.1
+          /tmp/mahach-browser/node_modules/.bin/playwright install --with-deps chromium
       - name: PostgreSQL transactions and checkout (disposable database)
         env:
+          NODE_PATH: /tmp/mahach-browser/node_modules
+          MAHACH_BROWSER_TEST: 'true'
           MAHACH_CI_DATABASE_URL: postgresql://test:test-only@127.0.0.1:5432/mahach_ci
         run: node scripts/test-integration-postgres.cjs
       - name: Dependency security

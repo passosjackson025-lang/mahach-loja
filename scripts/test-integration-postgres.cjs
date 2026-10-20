@@ -71,7 +71,7 @@ async function main(){
  const created=await Promise.all([post('/api/orders',payload({checkoutKey:key})),post('/api/orders',payload({checkoutKey:key}))]);
  const orders=await Promise.all(created.map(x=>x.json()));assert.ok(created.every(x=>x.ok),JSON.stringify(orders));
  assert.equal(orders[0].reference,orders[1].reference,'Repetição deve recuperar o mesmo pedido');
- assert.equal((await raw.query('SELECT count(*) FROM mahach_stage.orders')).rows[0].count,'1');
+ assert.equal(Number((await raw.query('SELECT count(*) FROM mahach_stage.orders')).rows[0].count),1);
  assert.equal(Number(await stock()),2,'Uma reserva para uma compra');
  const orderId=orders[0].reference,payment=[...payments.values()][0];
  assert.equal(payments.size,1,'Idempotência Pix é por pedido');
@@ -99,6 +99,11 @@ async function main(){
  paymentStatus='cancelled';r=await webhook(lastPayment.id);assert.equal(r.status,200);assert.equal(Number(await stock()),1,'Cancelamento confirmado libera reserva');
  r=await webhook(lastPayment.id);assert.equal(r.status,200);assert.equal(Number(await stock()),1,'Cancelamento repetido não duplica estoque');
  assert.ok(emailBodies.length>=2,'Confirmação aceita pelo provedor simulado');
+ if(process.env.MAHACH_BROWSER_TEST==='true'){
+  paymentStatus='pending';
+  await raw.query("UPDATE mahach_stage.products SET stock=3 WHERE id='confirmed-product'");
+  await require('./test-browser-checkout.cjs')(base);
+ }
  for(const path of ['/private/settings.key','/server.js','/.env','/planilha-original.csv','/assets/../server.js'])assert.equal((await fetch(base+path)).status,404);
  for(const path of ['/','/produtos/','/acompanhar.html','/finalizado.html']){r=await fetch(base+path);assert.equal(r.status,200);assert.ok(r.headers.get('content-security-policy'));assert.equal(r.headers.get('x-content-type-options'),'nosniff')}
  r=await fetch(base+'/api/products?page=1.8&limit=2.7');assert.equal(r.status,200);assert.equal((await r.json()).page,1);
