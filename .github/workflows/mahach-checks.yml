@@ -1,0 +1,85 @@
+name: MAHACH checks
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: mahach-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: mahach_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Syntax
+        run: |
+          node --check server.js
+          node --check commerce-flows.js
+          node --check bling-oauth.js
+          node --check site-settings-pg.js
+          node --check checkout.js
+          node --check tracking.js
+          node --check admin/admin.js
+      - name: Security and provider boundaries (no real integrations)
+        run: node scripts/test-launch-safety.cjs
+      - name: Bling OAuth security and sandbox card URL (mock)
+        run: node scripts/test-bling-oauth.cjs
+      - name: Catalog and private checkout
+        run: node scripts/test-offline.cjs
+      - name: Admin, CSRF and photo
+        run: node scripts/test-admin-photo.cjs
+      - name: Cloud storage contract (mock)
+        run: node scripts/test-cloud-storage.cjs
+      - name: Customers, orders and signed webhook (mock)
+        run: node scripts/test-loja-clientes.cjs
+      - name: Pix request and idempotency (mock)
+        run: node scripts/test-pix-checkout.cjs
+      - name: Public page structure
+        run: node scripts/testar-publicacao.cjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix /tmp/mahach-browser --no-audit --no-fund playwright@1.64.1
+          /tmp/mahach-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: PostgreSQL transactions and checkout (disposable database)
+        env:
+          NODE_PATH: /tmp/mahach-browser/node_modules
+          MAHACH_BROWSER_TEST: 'true'
+          MAHACH_CI_DATABASE_URL: postgresql://test:test-only@127.0.0.1:5432/mahach_ci
+        run: node scripts/test-integration-postgres.cjs
+      - name: Dependency security
+        run: npm audit --omit=dev --audit-level=high
+  public-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Public site and private route protection (GET only)
+        run: node scripts/check-public-site.cjs

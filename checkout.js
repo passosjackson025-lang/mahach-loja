@@ -246,6 +246,10 @@
    if(!response.ok)return;
    const data=await response.json();
    if(data.paymentStatus==='aprovado')showPaymentConfirmed();
+   else if(['recusado','cancelado','reembolsado','contestacao'].includes(data.paymentStatus)){
+    clearInterval(pixPoll);q('pixStatus').textContent='Pagamento '+data.paymentStatus+'. Consulte o acompanhamento ou entre em contato com a loja antes de pagar novamente.';
+    q('pixCopyButton').disabled=true;q('pixRetryButton').hidden=true;q('pixQrImage').hidden=true;
+   }
   }catch{} // O webhook e a consulta segura ao servidor confirmam o pagamento.
  }
  function startPixPolling(){if(pixPoll)clearInterval(pixPoll);pollPix();pixPoll=setInterval(pollPix,6500)}
@@ -264,6 +268,10 @@
    renderPix(data.pix);
   }catch(err){showPixPending(err.message||'Não foi possível gerar o Pix agora. Tente novamente para o mesmo pedido.');}finally{b.disabled=false}
  });
+ let checkoutKey='';
+ try{checkoutKey=sessionStorage.getItem('mahach-checkout-key')||''}catch{}
+ if(!checkoutKey)checkoutKey=crypto.randomUUID();
+ try{sessionStorage.setItem('mahach-checkout-key',checkoutKey)}catch{}
  form.addEventListener('submit',async e=>{
   e.preventDefault();if(!checkoutEnabled)return;
   updateSubmitLabel(); // Campo CPF precisa estar visivel antes da validacao do navegador.
@@ -275,11 +283,13 @@
   try{
    const data=Object.fromEntries(new FormData(form));if(payment!=='pix')delete data.pixCpf;data.address=form.elements.delivery.value==='pickup'?'':composeAddress();data.marketingOptIn=form.elements.marketingOptIn.checked;
    if(form.elements.delivery.value!=='pickup'&&data.address.length>320)throw Error('Endereco muito longo. Reduza o complemento antes de continuar.');
-   const response=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...data,quoteId:selectedQuote,items:bagPayload()})});
+   const response=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...data,checkoutKey,quoteId:selectedQuote,items:bagPayload()})});
    const result=await response.json();if(!response.ok)throw Error(result.error||'Não foi possível registrar o pedido');
    // A referência e o token permanecem no navegador; não entram no URL enviado ao Mercado Pago.
    try{sessionStorage.setItem('mahach-order-token-'+result.reference,result.token);sessionStorage.setItem('mahach-last-order',JSON.stringify({reference:result.reference,token:result.token}))}catch{}
-   try{localStorage.removeItem('mahach-bag')}catch{}
+   try{localStorage.removeItem('mahach-bag');sessionStorage.removeItem('mahach-checkout-key')}catch{}
+   checkoutKey=crypto.randomUUID();
+   if(result.mode==='paid'){showRegisteredOrder(result);showPaymentConfirmed();return;}
    if(result.mode==='online'){
     const url=new URL(result.checkoutUrl||'');
     if(url.protocol!=='https:'||!/(^|\.)mercadopago\.com(\.br)?$/.test(url.hostname))throw Error('Link de pagamento invalido. O pedido foi registrado; entre em contato com a loja.');

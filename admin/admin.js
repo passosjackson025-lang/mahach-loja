@@ -28,7 +28,7 @@ async function listProducts(){const res=await api('/api/admin/products?'+new URL
  return r}));const prev=elem('button','← Anterior'),next=elem('button','Próxima →');prev.disabled=page===1;next.disabled=page*30>=res.total;prev.onclick=()=>{page--;listProducts()};next.onclick=()=>{page++;listProducts()};$('#adminPagination').replaceChildren(prev,elem('span','Página '+page),next)}
 async function listCategories(){const r=await api('/api/admin/categories');categories=r.categories;$('#categoryList').replaceChildren(...categories.map(c=>{const a=elem('article',undefined,'admin-record'),inf=elem('div',undefined,'info'),btn=elem('button','Editar');inf.append(elem('strong',c.name),elem('small',c.subtitle));btn.onclick=async()=>{const name=prompt('Nome da categoria',c.name);if(name===null)return;const subtitle=prompt('Descrição',c.subtitle);if(subtitle===null)return;try{await api('/api/admin/categories/'+c.id,'PUT',{name,subtitle});say('Categoria atualizada');await listCategories()}catch(e){say(e.message)}};const del=elem('button','Excluir');del.className='button-danger';del.disabled=['perfumes','corpo','beleza'].includes(c.id);del.onclick=async()=>{if(!confirm('Excluir a categoria '+c.name+'? Só funciona se não houver produtos vinculados.'))return;try{await api('/api/admin/categories/'+c.id,'DELETE',{});say('Categoria excluída');await listCategories()}catch(e){say(e.message)}};a.append(inf,btn,del);return a}))}
 $('#newCategory')?.addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/admin/categories','POST',Object.fromEntries(new FormData(e.target)));e.target.reset();say('Categoria adicionada');await listCategories()}catch(x){say(x.message)}});
-async function editProduct(p){if(!categories.length){const x=await api('/api/admin/categories');categories=x.categories}const f=$('#productForm');f.reset();f.elements.category.replaceChildren(...categories.map(c=>{const o=elem('option',c.name);o.value=c.id;return o}));$('#editTitle').textContent=p?'Editar produto':'Novo produto';if(p)for(const k of ['id','name','price','description','category','brand','image','sku','stock','weight','width','height','length'])f.elements.namedItem(k).value=p[k]??'';else f.elements.id.value='';f.elements.active.checked=p?!!p.active:true;$('#photoFile').value='';$('#photoStatus').textContent='';$('#photoPreview').src=p?.image||'/assets/produto-sem-foto.svg';$('#editDialog').showModal()}
+async function editProduct(p){if(!categories.length){const x=await api('/api/admin/categories');categories=x.categories}const f=$('#productForm');f.reset();f.elements.category.replaceChildren(...categories.map(c=>{const o=elem('option',c.name);o.value=c.id;return o}));$('#editTitle').textContent=p?'Editar produto':'Novo produto';if(p)for(const k of ['id','name','price','description','category','brand','image','sku','stock','weight','width','height','length'])f.elements.namedItem(k).value=p[k]??'';else f.elements.id.value='';f.elements.active.checked=p?!!p.active:true;f.elements.stock_confirmed.checked=p?.stock_confirmed===true;f.elements.shipping_confirmed.checked=p?.shipping_confirmed===true;$('#photoFile').value='';$('#photoStatus').textContent='';$('#photoPreview').src=p?.image||'/assets/produto-sem-foto.svg';$('#editDialog').showModal()}
 $('#newProduct')?.addEventListener('click',()=>editProduct(null));$('#cancelEdit')?.addEventListener('click',()=>$('#editDialog').close());$('#closeEdit')?.addEventListener('click',()=>$('#editDialog').close());
 function readPicture(file){return new Promise((resolve,reject)=>{const img=new Image();const url=URL.createObjectURL(file);img.onload=()=>{URL.revokeObjectURL(url);resolve(img)};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Não foi possível abrir a foto.'))};img.src=url})}
 async function preparePhoto(file){
@@ -41,7 +41,7 @@ async function preparePhoto(file){
 }
 $('#photoFile')?.addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{const preview=URL.createObjectURL(file);$('#photoPreview').src=preview;$('#photoPreview').onload=()=>URL.revokeObjectURL(preview);$('#photoStatus').textContent='Pronta para enviar ao salvar.'}catch(err){$('#photoStatus').textContent=err.message}});
 $('#productForm')?.addEventListener('submit',async e=>{
- e.preventDefault();const f=e.target,d=Object.fromEntries(new FormData(f)),id=d.id;d.active=f.elements.active.checked;
+ e.preventDefault();const f=e.target,d=Object.fromEntries(new FormData(f)),id=d.id;d.active=f.elements.active.checked;d.stock_confirmed=f.elements.stock_confirmed.checked;d.shipping_confirmed=f.elements.shipping_confirmed.checked;
  const btn=f.querySelector('[type="submit"]');btn.disabled=true;
  try{
   const file=$('#photoFile').files[0];if(file){$('#photoStatus').textContent='Convertendo e enviando foto…';const blob=await preparePhoto(file);const r=await fetch('/api/admin/images',{method:'POST',headers:{'Content-Type':'image/webp','X-CSRF-Token':csrf},credentials:'same-origin',body:blob});const result=await r.json();if(!r.ok)throw Error(result.error||'Falha ao enviar foto');d.image=result.url;$('#photoStatus').textContent='Foto enviada!'}
@@ -55,7 +55,7 @@ async function listOrders(){
   info.append(elem('strong',o.id+' · '+o.customer_name),elem('small',new Date(o.created).toLocaleString('pt-BR')+' · '+o.phone),elem('small',o.items.map(x=>x.qty+'x '+x.name).join(', ')),elem('small','R$ '+Number(o.subtotal).toFixed(2)+' · '+o.delivery+' · '+o.payment),elem('small',o.address||'Retirada na loja'));
   info.append(elem('small','Pagamento: '+(o.payment_status||'pendente')));
   const sel=elem('select');
-  for(const status of ['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','enviado','pronto_retirada','concluido','cancelado']){
+  for(const status of ['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','embalado','enviado','pronto_retirada','concluido','cancelado']){
    const opt=elem('option',status.replaceAll('_',' '));opt.value=status;opt.selected=o.status===status;sel.append(opt);
   }
   const code=elem('input');code.value=o.tracking_code||'';code.placeholder='Código de rastreio';
@@ -84,7 +84,7 @@ $('#blingPreviewButton')?.addEventListener('click',async()=>{try{const r=await a
 $('#syncButton')?.addEventListener('click',async e=>{e.target.disabled=true;$('#syncStatus').textContent='Sincronizando…';try{const r=await api('/api/admin/sync-vendizap','POST',{});$('#syncStatus').textContent=`${r.synced} produtos atualizados e ${r.images} fotos encontradas.`;await stats()}catch(x){$('#syncStatus').textContent=x.message}finally{e.target.disabled=false}});
 
 // Configurações persistentes: campos secretos só retornam indicadores, nunca o valor.
-const SECTIONS={'loja':'Loja e retirada','vendizap':'Vendizap — Catálogo','melhor-envio':'Melhor Envio — Transportadoras','bling':'Bling — ERP (OAuth pendente)','mercado-pago':'Mercado Pago — Pagamentos (cobrança pendente)','email':'E-mails transacionais — Resend'};
+const SECTIONS={'loja':'Loja e retirada','vendizap':'Vendizap — Catálogo','melhor-envio':'Melhor Envio — Transportadoras','bling':'Bling — Conexão com ERP','mercado-pago':'Mercado Pago — Pagamentos (cobrança pendente)','email':'E-mails transacionais — Resend'};
 let settingsSnapshot=[];
 async function loadSettings(){
  const {fields}=await api('/api/admin/settings');settingsSnapshot=fields;
@@ -104,7 +104,10 @@ async function loadSettings(){
   box.append(grid);root.append(box);
  }
  const tests=$('#integrationTests');tests.replaceChildren();
- for(const [p,n]of [['vendizap','Testar Vendizap'],['melhor-envio','Testar Melhor Envio'],['mercado-pago','Testar Mercado Pago'],['bling','Verificar status Bling']]){
+ const connect=elem('button','Autorizar conta Bling');connect.type='button';
+ connect.onclick=async()=>{connect.disabled=true;try{const r=await api('/api/admin/bling/connect','POST',{});const u=new URL(r.url);if(u.origin!=='https://bling.com.br')throw Error('Retorno inválido');location.assign(u.href)}catch(e){$('#connectionTestResult').textContent=e.message;connect.disabled=false}};tests.append(connect);
+
+ for(const [p,n]of [['vendizap','Testar Vendizap'],['melhor-envio','Testar Melhor Envio'],['mercado-pago','Testar Mercado Pago (cartão)'],['mercado-pago-pix','Testar conta da integração Pix'],['bling','Verificar status Bling'],['email','Enviar e-mail de teste ao administrador']]){
   const b=elem('button',n);b.type='button';b.onclick=async()=>{b.disabled=true;$('#connectionTestResult').textContent='Verificando conexão…';try{const r=await api('/api/admin/integrations/test','POST',{provider:p});$('#connectionTestResult').textContent=r.message}catch(e){$('#connectionTestResult').textContent=e.message}finally{b.disabled=false}};tests.append(b)
  }
 }

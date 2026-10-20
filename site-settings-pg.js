@@ -22,21 +22,21 @@ async function makeSettingsPg(db,keyFile){
  }
  await reload();
  function get(name){
-  if(!FIELDS[name])throw Error('Configuração não suportada');
+  if(!Object.hasOwn(FIELDS,name))throw Error('Configuração não suportada');
   const row=stored.get(name);
   return row?(row.encrypted?unseal(key(false),row.value):row.value):String(process.env[name]||'');
  }
- function list(){return Object.entries(FIELDS).map(([name,meta])=>{
+ function list(){return Object.entries(FIELDS).filter(([,meta])=>!meta.internal).map(([name,meta])=>{
   const row=stored.get(name),value=get(name);
   return {key:name,label:meta.label,kind:meta.kind,section:meta.section,configured:!!value,
    source:row?'painel':process.env[name]?'ambiente':'vazio',value:meta.kind==='secret'?'':value,updatedAt:row?.updated_at||null};
  })}
- async function save(changes,clears=[]){
+ async function save(changes,clears=[],internal=false){
   if(!changes||typeof changes!=='object'||Array.isArray(changes)||!Array.isArray(clears))throw Object.assign(Error('Dados inválidos'),{status:400});
-  if(Object.keys(changes).length>FIELDS.length||clears.length>FIELDS.length)throw Object.assign(Error('Muitos campos'),{status:400});
+  if(Object.keys(changes).length>Object.keys(FIELDS).length||clears.length>Object.keys(FIELDS).length)throw Object.assign(Error('Muitos campos'),{status:400});
   const updates=[];
   for(const [name,raw] of Object.entries(changes)){
-   const def=FIELDS[name];if(!def||typeof raw!=='string')throw Object.assign(Error('Campo inválido: '+name),{status:400});
+   const def=Object.hasOwn(FIELDS,name)?FIELDS[name]:null;if(!def||def.internal&&!internal||typeof raw!=='string')throw Object.assign(Error('Campo inválido: '+name),{status:400});
    const value=raw.trim();if(value.length>(def.max||1500))throw Object.assign(Error('Valor muito longo: '+name),{status:400});
    if(def.kind==='secret'&&!value)continue;
    if(def.kind==='cep'&&value&&!/^\d{8}$/.test(value.replace(/\D/g,'')))throw Object.assign(Error('CEP deve ter oito dígitos'),{status:400});
@@ -46,7 +46,7 @@ async function makeSettingsPg(db,keyFile){
    if(def.kind==='bool'&&value&&!['true','false'].includes(value))throw Object.assign(Error('Use true ou false'),{status:400});
    updates.push([name,['cep','phone'].includes(def.kind)?value.replace(/\D/g,''):value,def.kind==='secret']);
   }
-  for(const name of clears)if(!FIELDS[name]||typeof name!=='string')throw Object.assign(Error('Campo inválido para limpar'),{status:400});
+  for(const name of clears)if(!FIELDS[name]||FIELDS[name].internal&&!internal||typeof name!=='string')throw Object.assign(Error('Campo inválido para limpar'),{status:400});
   await db.transaction(async()=>{
    const upsert=db.prepare('INSERT INTO site_settings(key,value,encrypted,updated_at) VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,encrypted=excluded.encrypted,updated_at=excluded.updated_at');
    for(const [name,value,secret] of updates)await upsert.run(name,secret?seal(key(true),value):value,secret?1:0,new Date().toISOString());
@@ -54,6 +54,6 @@ async function makeSettingsPg(db,keyFile){
   });
   await reload();return list();
  }
- return {get,list,save};
+ return {get,list,save:(changes,clears)=>save(changes,clears),saveInternal:changes=>{if(Object.keys(changes).some(k=>!FIELDS[k]?.internal))throw Error('Campo interno inválido');return save(changes,[],true)}};
 }
 module.exports={makeSettingsPg};

@@ -5,7 +5,7 @@ const original=Module._load;
 let customer=null,order=null,stock=3,approved=0;
 const adminPassword='senha-do-teste-123',salt='a'.repeat(32),adminHash=crypto.scryptSync(adminPassword,salt,64).toString('hex');
 const sessions=[];
-const product={id:'perfume-123',name:'Perfume de Teste',category:'perfumes',price:95,weight:.4,width:15,height:18,length:12,stock:3,active:1};
+const product={id:'perfume-123',name:'Perfume de Teste',category:'perfumes',price:95,weight:.4,width:15,height:18,length:12,stock:3,active:1,stock_confirmed:true,shipping_confirmed:true};
 class Pool{
  async query(sql,args=[]){
   const query=sql.toLowerCase(),has=s=>query.includes(s);
@@ -17,7 +17,7 @@ class Pool{
   if(has('count(*)')&&has('customers'))return response([{n:customer?1:0}]);
   if(has('select id from mahach_stage."categories"'))return response([{id:'perfumes'}]);
   if(has('select * from mahach_stage."products"'))return response([{...product,stock}]);
-  if(has('select stock from mahach_stage."products"'))return response([{stock}]);
+  if(has('select stock')&&has('products'))return response([{...product,stock,stock_confirmed:true,active:1}]);
   if(has('update mahach_stage."products" set stock=stock-')){stock-=args[0];return response([],1)}
   if(has('insert into mahach_stage."orders"')){
    order={id:args[0],public_token_hash:args[1],created:args[2],status:args[3],customer_name:args[4],phone:args[5],customer_email:args[6],cep:args[7],address:args[8],delivery:args[9],payment:args[10],items_json:args[11],subtotal:args[12],shipping_cost:args[13],marketing_opt_in:args[17],payment_status:'pendente'};return response([],1)
@@ -27,9 +27,10 @@ class Pool{
    customer={email,name,phone,marketing_opt_in:!!optedIn,marketing_consent_at:optedIn?new Date().toISOString():null,last_order_id};return response([],1)
   }
   if(has('from mahach_stage."orders"')&&has('where id='))return response(order&&order.id===args[0]?[{...order}]:[]);
+  if(has('update mahach_stage."orders" set stock_reserved=')){if(order)order.stock_reserved=args[0];return response([],1)}
   if(has('update mahach_stage."orders" set mp_payment_id=')){if(order?.id===args[1])order.mp_payment_id=args[0];return response([],1)}
   if(has('update mahach_stage."orders" set mp_preference_id=')){if(order?.id===args[1])order.mp_preference_id=args[0];return response([],1)}
-  if(has('update mahach_stage."orders" set payment_status=')){Object.assign(order,{payment_status:args[0],status:args[1],mp_payment_id:args[2]});approved++;return response([],1)}
+  if(has('update mahach_stage."orders" set payment_status=')){Object.assign(order,{payment_status:args[0],status:args[1],mp_payment_id:args[2],stock_reserved:false});approved++;return response([],1)}
   if(has('from mahach_stage."admins"'))return response(args[0]==='admin@exemplo.test'?[{email:'admin@exemplo.test',salt,hash:adminHash}]:[]);
   if(has('delete from mahach_stage."sessions"'))return response();
   if(has('insert into mahach_stage."sessions"')){sessions.push({token_hash:args[0],email:args[1],csrf:args[2],expires:args[3]});return response([],1)}
@@ -54,7 +55,7 @@ async function main(){await ready;await new Promise(r=>server.listen(0,'127.0.0.
   r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'pix',pixCpf:'52998224725',marketingOptIn:true,items:[{id:'perfume-123',qty:1}]})});
   assert.equal(r.status,201);const out=await r.json();assert.equal(out.mode,'pix');assert.equal(out.pix.qrCode,'PIX-TESTE-NAO-PAGAVEL');assert.equal(order.mp_payment_id,'123456789');
   assert.ok(customer.marketing_opt_in);assert.equal(customer.name,'Pessoa Teste');assert.equal(order.marketing_opt_in,true);
-  assert.equal(order.customer_email,'cliente@exemplo.test');assert.equal(stock,3);
+  assert.equal(order.customer_email,'cliente@exemplo.test');assert.equal(stock,2,'Reserva feita antes de chamar o provedor');
   const dataId='123456789',requestId='fake-request-id',ts=Math.floor(Date.now()/1000).toString();
   const manifest=`id:${dataId};request-id:${requestId};ts:${ts};`;
   const sig=crypto.createHmac('sha256','secret-de-teste').update(manifest).digest('hex');

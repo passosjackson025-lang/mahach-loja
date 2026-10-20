@@ -1,0 +1,32 @@
+'use strict';
+const assert=require('node:assert/strict');
+const mp=require('../commerce-flows');
+const {clientIp}=require('../client-ip');
+const values={MERCADO_PAGO_ACCESS_TOKEN:' Bearer fake-token ',MERCADO_PAGO_WEBHOOK_SECRET:'fake-secret',PUBLIC_SITE_URL:'https://shop.invalid',RESEND_API_KEY:'fake-email',MAIL_FROM:'MAHACH <mail@shop.invalid>'};
+const conf=k=>values[k]||'';
+async function main(){
+ const original=global.fetch;let requests=0;
+ try{
+  assert.equal(mp.accessToken(conf),'fake-token');
+  assert.equal(mp.accessToken(mp.pixConfiguration(k=>({MERCADO_PAGO_PIX_ACCESS_TOKEN:'pix-specific',MERCADO_PAGO_ACCESS_TOKEN:'card-specific'})[k]||'')),'pix-specific');
+  const forwarded={headers:{'cf-connecting-ip':'203.0.113.10','x-forwarded-for':'192.0.2.99'},socket:{remoteAddress:'127.0.0.1'}};
+  assert.equal(clientIp(forwarded,{}),'127.0.0.1','Local requests cannot forge their client IP');
+  assert.equal(clientIp(forwarded,{RENDER_SERVICE_ID:'fake-render'}),'203.0.113.10');
+  assert.equal(clientIp({headers:{'cf-connecting-ip':'invalid'},socket:forwarded.socket},{RENDER_SERVICE_ID:'fake-render'}),'127.0.0.1');
+  assert.ok(mp.paymentUrl('https://www.mercadopago.com.br/checkout/v1/redirect?x=1'));
+  for(const u of ['https://evil.invalid','https://mercadopago.com.br.evil.invalid','https://user:pass@mercadopago.com.br','javascript:alert(1)'])assert.equal(mp.paymentUrl(u),null);
+  global.fetch=async()=>({ok:true,status:200,json:async()=>({})});
+  assert.equal((await mp.sendEmail(conf,'test@shop.invalid','test','<p>test</p>')).ok,false);
+  global.fetch=async()=>({ok:true,status:200,json:async()=>({id:'fake-provider-message'})});
+  assert.equal((await mp.sendEmail(conf,'test@shop.invalid','test','<p>test</p>')).providerId,'fake-provider-message');
+  global.fetch=async()=>({ok:false,status:429,json:async()=>({})});
+  assert.equal((await mp.sendEmail(conf,'test@shop.invalid','test','<p>test</p>')).ok,false);
+  global.fetch=async(url,options)=>{requests++;assert.equal(options.headers.Authorization,'Bearer fake-token');return {ok:false,status:401,json:async()=>({cause:[{code:7,description:'sensitive provider response'}]})}};
+  await assert.rejects(()=>mp.createPixPayment(conf,{id:'MH-EXAMPLE',subtotal:10,shipping_cost:0,customer_email:'test@shop.invalid',customer_name:'Test'},'52998224725'),err=>err.diagnostic==='MP_HTTP_401_7'&&!err.message.includes('sensitive'));
+  assert.equal(requests,1);
+  global.fetch=async()=>({ok:true,status:201,json:async()=>({id:'pref',init_point:'https://evil.invalid/pay'})});
+  await assert.rejects(()=>mp.createPreference(conf,{id:'MH-EXAMPLE',shipping_cost:0,customer_email:'test@shop.invalid',customer_name:'Test',payment:'card'},[{id:'x',name:'Test',qty:1,unit_price:10}]),/checkout/);
+  console.log('UNIT OK: token, URL allowlist, sanitized 401, email provider acknowledgement. No real integrations.');
+ }finally{global.fetch=original}
+}
+main().catch(e=>{console.error(e);process.exitCode=1});

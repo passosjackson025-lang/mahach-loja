@@ -1,9 +1,11 @@
 'use strict';
 /* MAHACH PostgreSQL (staging). Não substitua a versão SQLite original. */
 const http=require('node:http');
+const {clientIp}=require('./client-ip');
 const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
+const scrypt=require('node:util').promisify(crypto.scrypt);
 const {db,bootstrap}=require('./pg-db');
 const {importIntoPg,cleanCategory}=require('./csv-import-pg');
 const {makeSettingsPg}=require('./site-settings-pg');
@@ -14,10 +16,12 @@ const MAX_BODY=32*1024, CATEGORIES=[['perfumes','Perfumaria','Fragrâncias para 
 const DEFAULT_WHATSAPP='5511995209827';
 // Não usar SQLite na Render. A chave local é carregada a partir de private/settings.key
 // ou da variável MAHACH_SETTINGS_KEY (recomendada para Render).
-let settings;
+let settings,bling;
+const {createBling}=require('./bling-oauth');
 const ready=(async()=>{
  await bootstrap();
  settings=await makeSettingsPg(db,path.join(PRIVATE,'settings.key'));
+ bling=createBling(settings);
 })();
 function normalizeCatalogQuery(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
 const conf=(name)=>settings.get(name);
@@ -36,11 +40,14 @@ async function body(req){if(!String(req.headers['content-type']||'').startsWith(
 async function bodyCsv(req){if(!/^text\/csv(?:;|$)/i.test(req.headers['content-type']||''))throw Object.assign(new Error('Envie CSV com Content-Type: text/csv'),{status:415});let bytes=0,chunks=[];for await(const part of req){bytes+=part.length;if(bytes>8*1024*1024)throw Object.assign(new Error('CSV maior que 8 MB'),{status:413});chunks.push(part)}return Buffer.concat(chunks).toString('utf8')}
 function str(x,max=255){return typeof x==='string'?x.trim().slice(0,max):''}
 function number(x){const n=Number(x);return Number.isFinite(n)?n:NaN}
-async function validProduct(data){
+async function validProduct(data,existingId=''){
  const p={id:str(data.id,80),name:str(data.name,220),description:str(data.description,10000),category:str(data.category,64),brand:str(data.brand,100),family:str(data.family,85),image:secureUrl(str(data.image,1500)),sku:str(data.sku,80),price:number(data.price),stock:data.stock===''||data.stock===null||data.stock===undefined?null:Number(data.stock),active:data.active===false||data.active===0?0:1,weight:data.weight||null,width:data.width||null,height:data.height||null,length:data.length||null};
  if(!p.name||p.name.length<2||!p.category||!(await db.prepare('SELECT id FROM categories WHERE id=?').get(p.category))||!Number.isFinite(p.price)||p.price<0||p.price>100000)throw Object.assign(new Error('Confira nome, categoria e preço'),{status:400});
  if(p.stock!==null&&(!Number.isInteger(p.stock)||p.stock<0))throw Object.assign(new Error('Estoque inválido'),{status:400});
  for(const m of ['weight','width','height','length']){if(p[m]!==null){p[m]=number(p[m]);if(!(p[m]>0&&p[m]<10000))throw Object.assign(new Error('Dimensão ou peso inválido'),{status:400})}}
+ p.sku=p.sku||('MHC-'+(existingId||crypto.randomBytes(12).toString('hex')).toUpperCase());
+ p.stock_confirmed=data.stock_confirmed===true&&p.stock!==null;
+ p.shipping_confirmed=data.shipping_confirmed===true&&['weight','width','height','length'].every(k=>Number(p[k])>0);
  p.search_text=searchText(p);return p;
 }
 function cookies(req){return Object.fromEntries((req.headers.cookie||'').split(';').map(x=>x.trim().split('=')).filter(x=>x.length===2))}
@@ -55,8 +62,8 @@ function checkOrigin(req){const o=req.headers.origin;const host=req.headers.host
 function canWrite(req,s){return checkOrigin(req)&&req.headers['x-csrf-token']===s.csrf}
 function cookieValue(req,value,maxAge=28800){const secure=(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)?'; Secure':'';return `mahach_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`}
 const counters=new Map();
-function rate(req,key,max,window=60000){const ip=req.socket.remoteAddress||'local',n=Date.now(),k=`${key}:${ip}`,v=counters.get(k)||{time:n,count:0};if(n-v.time>window){v.time=n;v.count=0}v.count++;counters.set(k,v);if(counters.size>4000)for(const [k,v]of counters)if(n-v.time>3600000)counters.delete(k);return v.count<=max}
-function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku}}
+function rate(req,key,max,window=60000){const ip=clientIp(req),n=Date.now(),k=`${key}:${ip}`,v=counters.get(k)||{time:n,count:0};if(n-v.time>window){v.time=n;v.count=0}if(!counters.has(k)&&counters.size>=20000)return false;v.count++;counters.set(k,v);if(counters.size>4000)for(const [k,v]of counters)if(n-v.time>3600000)counters.delete(k);return v.count<=max}
+function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku,stock_confirmed:p.stock_confirmed===true,shipping_confirmed:p.shipping_confirmed===true}}
 const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.ttf':'font/ttf','.ico':'image/x-icon'};
 async function staticFile(req,res,url){
  let pathname;try{pathname=decodeURIComponent(url.pathname)}catch{return problem(res,400,'URL inválida')}
@@ -99,14 +106,14 @@ async function syncVendizap(){let updates=0,images=0;
  return {synced:updates,images};
 }
 const liveQuotes=new Map();
-function itemsFingerprint(items,cep){return hash(cep+JSON.stringify(items.map(x=>[x.p.id,x.qty]).sort((a,b)=>a[0].localeCompare(b[0]))))}
+function itemsFingerprint(items,cep){return hash(cep+JSON.stringify(items.map(x=>[x.p.id,x.qty,x.p.price,x.p.weight,x.p.width,x.p.height,x.p.length]).sort((a,b)=>a[0].localeCompare(b[0]))))}
 async function shippingQuote(payload){
- const token=conf('MELHOR_ENVIO_TOKEN'),origin=conf('ORIGIN_CEP').replace(/\D/g,'');if(!token||origin.length!==8)throw Object.assign(new Error('Cotação indisponível até configurar token e CEP de origem'),{status:503});
+ const token=String(conf('MELHOR_ENVIO_TOKEN')||'').trim().replace(/^Bearer\s+/i,''),origin=conf('ORIGIN_CEP').replace(/\D/g,'');if(!token||origin.length!==8)throw Object.assign(new Error('Cotação indisponível até configurar token e CEP de origem'),{status:503});
  const cep=str(payload.cep,12).replace(/\D/g,'');if(cep.length!==8)throw Object.assign(new Error('CEP inválido'),{status:400});
  const items=await collectItems(payload.items);
  if(!items.length)throw Object.assign(new Error('Sacola vazia'),{status:400});
  // Frete exige peso e dimensoes reais da embalagem; sem estimativas ficticias.
- if(items.some(({p})=>![p.width,p.height,p.length,p.weight].every(n=>Number.isFinite(Number(n))&&Number(n)>0)))throw Object.assign(new Error('Para calcular frete, cadastre peso e dimensoes de todos os produtos da sacola.'),{status:422});
+ if(items.some(({p})=>p.shipping_confirmed!==true||![p.width,p.height,p.length,p.weight].every(n=>Number.isFinite(Number(n))&&Number(n)>0)))throw Object.assign(new Error('Para calcular frete, cadastre peso e dimensoes de todos os produtos da sacola.'),{status:422});
  const products=items.map(({p,qty})=>({id:p.id,width:Number(p.width),height:Number(p.height),length:Number(p.length),weight:Number(p.weight),insurance_value:p.price,quantity:qty}));
  const api=conf('MELHOR_ENVIO_SANDBOX')==='true'?'https://sandbox.melhorenvio.com.br':'https://melhorenvio.com.br';
  const r=await fetch(api+'/api/v2/me/shipment/calculate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Accept':'application/json','User-Agent':'MAHACH ('+(conf('SHIPPING_CONTACT_EMAIL')||'suporte@mahach.com.br')+')'},body:JSON.stringify({from:{postal_code:origin},to:{postal_code:cep},products}),signal:AbortSignal.timeout(15000)});
@@ -130,7 +137,7 @@ async function shippingQuote(payload){
   .map(x=>({service:String(x.name||'Entrega'),carrier:/^jet$/i.test(String(x.company?.name||''))?'J&T Express':String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
   .filter(x=>Number.isFinite(x.cost)&&x.cost>=0&&Number.isFinite(x.days)&&x.days>=0);
 }
-async function collectItems(items){if(!Array.isArray(items)||items.length>30)throw Object.assign(new Error('Sacola inválida'),{status:400});const ids=new Set(),out=[];for(const it of items){const id=str(it.id,80),qty=Number(it.qty);if(!id||ids.has(id)||!Number.isInteger(qty)||qty<1||qty>20)throw Object.assign(new Error('Quantidade inválida'),{status:400});ids.add(id);const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(id));if(!p)throw Object.assign(new Error('Produto indisponível'),{status:400});if(p.stock!==null&&p.stock<qty)throw Object.assign(new Error('Quantidade indisponível: '+p.name),{status:400});out.push({p,qty})}return out}
+async function collectItems(items){if(!Array.isArray(items)||items.length>30)throw Object.assign(new Error('Sacola inválida'),{status:400});const ids=new Set(),out=[];for(const it of items){const id=str(it.id,80),qty=Number(it.qty);if(!id||ids.has(id)||!Number.isInteger(qty)||qty<1||qty>20)throw Object.assign(new Error('Quantidade inválida'),{status:400});ids.add(id);const p=(await db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(id));if(!p)throw Object.assign(new Error('Produto indisponível'),{status:400});if(!Number.isFinite(Number(p.price))||Number(p.price)<=0)throw Object.assign(new Error('Produto sem preço válido'),{status:400});if(p.stock_confirmed!==true||p.stock===null||p.stock===undefined||!Number.isInteger(Number(p.stock))||Number(p.stock)<qty)throw Object.assign(new Error('Quantidade indisponível: '+p.name),{status:400});out.push({p,qty})}return out}
 
 // Upload de imagens WEBP: cliente normaliza foto no Canvas. Servidor valida assinatura,
 // dimensões 1200 x 1200 e grava nome aleatório, sem sobrescrever outros arquivos.
@@ -152,55 +159,125 @@ async function imageUpload(req){
 async function sendTransactional(orderId,kind){
  const o=(await db.prepare('SELECT * FROM orders WHERE id=?').get(orderId));if(!o)return {ok:false};
  const esc=commerce.htmlesc,customer=o.customer_email;
+ if(kind==='status'){
+  const labels={em_preparacao:'em preparação',embalado:'embalado',enviado:'enviado',pronto_retirada:'pronto para retirada',concluido:'entregue ou retirado',cancelado:'cancelado'};
+  if(!customer||!labels[o.status])return {customer:{ok:false,reason:'Sem atualização notificável'}};
+  return {customer:await commerce.sendEmail(conf,customer,'MAHACH: pedido '+labels[o.status]+' · '+o.id,'<h2>Pedido '+esc(o.id)+'</h2><p>Seu pedido está '+esc(labels[o.status])+'.</p><p>Pagamento: '+esc(o.payment_status)+'. Consulte o acompanhamento para mais informações.</p>')};
+ }
  const summary=`<h2>Pedido ${esc(o.id)} · MAHACH</h2><p>Olá, ${esc(o.customer_name)}.</p><p>Itens: ${JSON.parse(o.items_json).map(i=>esc(i.qty+'x '+i.name)).join(', ')}</p>`;
  const approved=kind==='approved',tracking=kind==='tracking';
  const total=(Number(o.subtotal)+Number(o.shipping_cost||0)).toFixed(2).replace('.',',');
- const trackingPage='https://rastreamento.correios.com.br/app/index.php';
+ const trackingPage=secureUrl(o.tracking_url)||(o.shipping_service?.toLowerCase().includes('correios')?'https://rastreamento.correios.com.br/app/index.php':'');
  const customerSubject=approved?'MAHACH: pagamento aprovado · '+o.id:tracking?'MAHACH: seu código de rastreio · '+o.id:'MAHACH: pedido registrado · '+o.id;
  const quickDelivery=['uber','99'].includes(o.delivery);
- const custHtml=summary+(tracking?`<p>Seu código dos Correios: <strong>${esc(o.tracking_code)}</strong></p><p>Consulte diretamente em <a href="${trackingPage}">Rastreamento Correios</a>.</p>`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe MAHACH.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':o.delivery==='correios'?'<p>O código de rastreamento dos Correios será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
+ const custHtml=summary+(tracking?`<p>Seu código de rastreio: <strong>${esc(o.tracking_code)}</strong></p>${trackingPage?`<p><a href="${esc(trackingPage)}">Acompanhar na transportadora</a></p>`:"<p>Consulte a loja para obter o link da transportadora.</p>"}`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe MAHACH.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':['correios','transportadora'].includes(o.delivery)?'<p>O código de rastreamento será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
  const result={};
- const flag=tracking?'tracking_email_sent':'customer_email_sent';
- if(customer&&!o[flag]){result.customer=await commerce.sendEmail(conf,customer,customerSubject,custHtml);if(result.customer.ok)(await db.prepare('UPDATE orders SET '+flag+'=1 WHERE id=?').run(orderId))}
+ const flag=tracking?'tracking_email_sent':approved?'customer_email_sent':null;
+ if(customer&&(!flag||!o[flag])){result.customer=await commerce.sendEmail(conf,customer,customerSubject,custHtml);if(flag&&result.customer.ok)(await db.prepare('UPDATE orders SET '+flag+'=1 WHERE id=?').run(orderId))}
  if(approved&&conf('ADMIN_EMAIL')&&!o.admin_email_sent){result.admin=await commerce.sendEmail(conf,conf('ADMIN_EMAIL'),'MAHACH: venda paga · '+o.id,summary+'<p>Pagamento verificado no Mercado Pago. Total: R$ '+total+'.</p>');if(result.admin.ok)(await db.prepare('UPDATE orders SET admin_email_sent=1 WHERE id=?').run(orderId))}
  return result;
 }
-async function processVerifiedPayment(paymentId){
- const pay=await commerce.getVerifiedPayment(conf,paymentId),id=str(pay.external_reference,40);
+async function processVerifiedPayment(paymentId,paymentConfiguration=conf){
+ const pay=await commerce.getVerifiedPayment(paymentConfiguration,paymentId),id=str(pay.external_reference,40);
  const o=await db.prepare('SELECT * FROM orders WHERE id=?').get(id);
  if(!o||!['pix','card'].includes(o.payment))return {ignored:true};
  const expected=commerce.cents(Number(o.subtotal)+Number(o.shipping_cost||0));
  if(pay.currency_id!=='BRL'||commerce.cents(pay.transaction_amount)!==expected)return {ignored:true,reason:'Valor divergente'};
  if(o.payment==='pix'&&pay.payment_method_id!=='pix')return {ignored:true,reason:'Metodo divergente'};
- if(o.payment==='pix'&&o.mp_payment_id&&o.mp_payment_id!==String(pay.id))return {ignored:true,reason:'Pagamento divergente'};
- if(pay.status!=='approved')return {approved:false};
+ if(o.mp_payment_id&&o.mp_payment_id!==String(pay.id))return {ignored:true,reason:'Pagamento divergente'};
+ if(o.payment==='card'&&pay.payment_type_id!=='credit_card')return {ignored:true,reason:'Metodo divergente'};
+ if(pay.status!=='approved'){
+  const states={pending:'pendente',in_process:'em_analise',authorized:'em_analise',rejected:'recusado',cancelled:'cancelado',refunded:'reembolsado',charged_back:'contestacao'};
+  const state=states[pay.status];if(!state)return {ignored:true};
+  await db.transaction(async()=>{
+   const locked=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(id);
+   if(!locked||(locked.mp_payment_id&&locked.mp_payment_id!==String(pay.id)))return;
+   if(['reembolsado','contestacao'].includes(locked.payment_status))return;
+   if(locked.payment_status==='aprovado'&&!['refunded','charged_back'].includes(pay.status))return;
+   if(pay.status==='cancelled'&&locked.payment_status!=='aprovado'&&locked.stock_reserved){
+    for(const item of JSON.parse(locked.items_json).sort((a,b)=>String(a.id).localeCompare(String(b.id))))await db.prepare('UPDATE products SET stock=stock+? WHERE id=?').run(item.qty,item.id);
+    await db.prepare('UPDATE orders SET stock_reserved=? WHERE id=?').run(false,id);
+   }
+   await db.prepare('UPDATE orders SET payment_status=? WHERE id=?').run(state,id);
+  });
+  return {approved:false};
+ }
  const applied=await db.transaction(async()=>{
   const locked=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(id);
-  if(!locked||locked.payment_status==='aprovado')return false;
+  if(!locked||['aprovado','reembolsado','contestacao'].includes(locked.payment_status))return false;
   // Não confirma o mesmo pedido com identificadores de pagamento diferentes.
   if(locked.mp_payment_id&&locked.mp_payment_id!==String(pay.id))return false;
   let missingStock=false;
   const reserved=[];
   const snapshot=JSON.parse(locked.items_json).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-  for(const item of snapshot){
-   const qty=Number(item.qty),product=await db.prepare('SELECT stock FROM products WHERE id=? FOR UPDATE').get(item.id);
-   if(!product||!Number.isInteger(qty)||qty<1||qty>20){missingStock=true;continue}
-   if(product.stock!==null){
+  for(const item of locked.stock_reserved?[]:snapshot){
+   const qty=Number(item.qty),product=await db.prepare('SELECT stock,stock_confirmed FROM products WHERE id=? FOR UPDATE').get(item.id);
+   if(!product||product.stock_confirmed!==true||!Number.isInteger(qty)||qty<1||qty>20){missingStock=true;continue}
+   if(product.stock!==null&&product.stock!==undefined){
     if(product.stock<qty){missingStock=true;continue}
     reserved.push({id:item.id,qty});
-   }
+   }else missingStock=true;
   }
   // Se faltar qualquer item, nenhuma unidade é debitada automaticamente.
   if(!missingStock)for(const line of reserved)await db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(line.qty,line.id);
   const nextStatus=missingStock?'estoque_pendente':'pagamento_aprovado';
-  await db.prepare('UPDATE orders SET payment_status=?,status=?,mp_payment_id=? WHERE id=?')
+  await db.prepare('UPDATE orders SET payment_status=?,status=?,mp_payment_id=?,stock_reserved=false WHERE id=?')
    .run('aprovado',nextStatus,String(pay.id),id);
   return true;
  });
- if(applied)await sendTransactional(id,'approved');
+ // Se o provedor de e-mail falhar, o webhook pode repetir sem debitar estoque.
+ try{await sendTransactional(id,'approved')}catch{console.warn('[Email MAHACH] confirmação pendente para reenvio');}
  return {approved:true,newlyConfirmed:applied};
 }
+
+function checkoutIdentity(key){
+ if(typeof key!=='string'||!/^[-a-f0-9]{36,80}$/i.test(key))return null;
+ return {id:'MH-'+hash('MAHACH-ORDER:'+key).slice(0,24).toUpperCase(),token:crypto.createHash('sha256').update('MAHACH-ACCESS:'+key).digest('base64url')};
+}
+async function cardCheckout(orderId,token){
+ return db.transaction(async()=>{
+  const o=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(orderId);
+  if(!o||o.payment!=='card')throw Object.assign(Error('Pedido de cartão não encontrado'),{status:404});
+  if(o.payment_status==='aprovado')return {paid:true};
+  if(o.mp_preference_id)return commerce.getPreference(conf,o.mp_preference_id);
+  const mp=await commerce.createPreference(conf,o,JSON.parse(o.items_json),token);
+  await db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(mp.preferenceId,o.id);
+  return mp;
+ });
+}
+async function replayCheckout(res,identity){
+ const o=await db.prepare('SELECT * FROM orders WHERE id=? AND public_token_hash=?').get(identity.id,hash(identity.token));
+ if(!o)return false;
+ const result={reference:o.id,token:identity.token,replayed:true};
+ if(o.payment_status==='aprovado'){json(res,200,{...result,mode:'paid'});return true}
+ if(o.status==='cancelado'||['cancelado','reembolsado','contestacao'].includes(o.payment_status)){
+  json(res,409,{error:'Este pedido foi encerrado. Consulte o acompanhamento antes de iniciar outro pagamento.'});return true;
+ }
+ if(o.payment==='card'){
+  try{const mp=await cardCheckout(o.id,identity.token);json(res,200,{...result,mode:mp.paid?'paid':'online',checkoutUrl:mp.checkoutUrl||''})}
+  catch{json(res,502,{error:'Checkout de cartão indisponível. Tente novamente para recuperar o mesmo pedido.',reference:o.id})}
+ }else if(o.payment==='pix'){
+  const pix=o.mp_payment_id?commerce.pixDetails(await commerce.getVerifiedPayment(commerce.pixConfiguration(conf),o.mp_payment_id)):null;
+  json(res,200,{...result,mode:pix?.qrCode?'pix':'pix-retry',pix,notice:'Pedido recuperado. Não crie outro pagamento.'});
+ }else json(res,200,{...result,mode:'pickup-cash'});
+ return true;
+}
+
 async function api(req,res,u){const method=req.method, route=u.pathname;
+ if(route==='/api/integrations/bling/callback'&&method==='GET'){
+  res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');
+  const browserState=cookies(req).mahach_bling_state;
+  res.setHeader('Set-Cookie','mahach_bling_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/integrations/bling/callback; Max-Age=0');
+  await bling.finish(u.searchParams.get('state'),browserState,u.searchParams.get('code'),async owner=>!!await db.prepare('SELECT email FROM sessions WHERE token_hash=? AND expires>?').get(owner,Date.now()));
+  res.writeHead(303,{Location:'/admin/painel.html?bling=conectado'});return res.end();
+ }
+ if(route==='/sitemap.xml'&&method==='GET'){
+ const origin=commerce.httpsSite(conf('PUBLIC_SITE_URL'));if(!origin)return problem(res,503,'Configure a URL HTTPS principal da loja');
+ const pages=['/','/produtos/','/produtos/perfumaria-arabe/','/produtos/corpo-e-cuidado/','/produtos/beleza-essencial/'];
+ res.writeHead(200,{'Content-Type':'application/xml; charset=utf-8','Cache-Control':'public, max-age=3600'});
+ return res.end('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+pages.map(p=>'<url><loc>'+commerce.htmlesc(origin+p)+'</loc></url>').join('')+'</urlset>');
+ }
+ if(route==='/robots.txt'&&method==='GET'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end('User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nDisallow: /acompanhar.html\nDisallow: /finalizado.html\n')}
  if(route==='/api/health'&&method==='GET')return json(res,200,{ok:true,catalog:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n});
  if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:await checkoutAllowed(req),testMode:process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&process.env.MAHACH_ENABLE_CHECKOUT!=='true'},{'Cache-Control':'no-store'});
  if(route==='/api/meta'&&method==='GET'){
@@ -216,7 +293,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
  if(route==='/api/products'&&method==='GET'){
  if(!rate(req,'search',180))return problem(res,429,'Muitas buscas. Tente novamente.');
- const page=Math.min(500,Math.max(1,Number(u.searchParams.get('page'))||1)),limit=Math.min(48,Math.max(1,Number(u.searchParams.get('limit'))||24));
+ const page=Math.min(500,Math.max(1,Number.parseInt(u.searchParams.get('page'),10)||1)),limit=Math.min(48,Math.max(1,Number.parseInt(u.searchParams.get('limit'),10)||24));
  const category=str(u.searchParams.get('category'),64),brand=str(u.searchParams.get('brand'),100),family=str(u.searchParams.get('family'),85),q=normalizeCatalogQuery(str(u.searchParams.get('q'),100));
  const where=['active=1'],args=[];
  if(category&&category!=='todos'){where.push('category=?');args.push(category)}if(brand){where.push('brand=?');args.push(brand)}if(family){where.push('family=?');args.push(family)}
@@ -255,12 +332,13 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(liveQuotes.size>2000)for(const [key,item]of liveQuotes)if(Date.now()-item.created>600000)liveQuotes.delete(key);
  return json(res,200,{options,notice:'Cotação estimada. Etiqueta e prazo final serão confirmados pela loja.'});
  }
- if(route==='/api/payments/mercadopago/webhook'&&method==='POST'){
+ if(['/api/payments/mercadopago/webhook','/api/payments/mercadopago/pix-webhook'].includes(route)&&method==='POST'){
   // Notificacoes externas nao possuem cookie; continuam exigindo HMAC valido.
-  if(process.env.MAHACH_ENABLE_CHECKOUT!=='true'&&process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE!=='true')return problem(res,503,'Checkout de teste ainda não habilitado');
+  // Continuar recebendo pagamentos já iniciados mesmo com novas compras suspensas.
   if(!rate(req,'mp-webhook',160,60000))return problem(res,429,'Limite de notificações');
-  const id=commerce.verifyMPWebhook(conf,req,u);if(!id)return problem(res,401,'Assinatura inválida');
-  await body(req);const result=await processVerifiedPayment(id);return json(res,200,{received:true,...result});
+  const paymentConfiguration=route.endsWith('/pix-webhook')?commerce.pixConfiguration(conf):conf;
+   const id=commerce.verifyMPWebhook(paymentConfiguration,req,u);if(!id)return problem(res,401,'Assinatura inválida');
+  await body(req);const result=await processVerifiedPayment(id,paymentConfiguration);return json(res,200,{received:true,...result});
  }
  if(route==='/api/payments/status'&&(method==='GET'||method==='POST')){
   if(!rate(req,'payment-status',25,60000))return problem(res,429,'Muitas consultas de pagamento');
@@ -299,7 +377,10 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   if(!await checkoutAllowed(req))return problem(res,503,'Checkout indisponivel para visitantes durante os testes');
   if(!rate(req,'order',8,900000))return problem(res,429,'Muitas solicitações. Tente mais tarde');
   if(!checkOrigin(req))return problem(res,403,'Origem não autorizada');
-  const data=await body(req),items=await collectItems(data.items);if(!items.length)return problem(res,400,'Sua sacola está vazia');
+  const data=await body(req),identity=checkoutIdentity(data.checkoutKey);
+   if(data.checkoutKey&&!identity)return problem(res,400,'Identificador de tentativa inválido');
+   if(identity&&await replayCheckout(res,identity))return;
+   const items=await collectItems(data.items);if(!items.length)return problem(res,400,'Sua sacola está vazia');
   // Nunca permitir pagamento se a loja nao sabe quantas unidades tem.
   if(items.some(({p})=>p.stock===null||p.stock===undefined))return problem(res,400,'Informe o estoque dos produtos antes de receber pagamentos');
   const customer_name=str(data.name,120),phone=str(data.phone,20).replace(/\D/g,''),email=str(data.email,200).toLowerCase(),delivery=str(data.delivery,20),payment=str(data.payment,30),cep=str(data.cep,12).replace(/\D/g,''),address=str(data.address,320);
@@ -318,15 +399,23 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    freight=entry.cost;shippingService=entry.carrier+' · '+entry.service;
   }
   const subtotal=Math.round(items.reduce((acc,x)=>acc+x.p.price*x.qty,0)*100)/100;
-  const id='MH-'+crypto.randomBytes(5).toString('hex').toUpperCase(),token=random(),created=new Date().toISOString();
+  const id=identity?.id||'MH-'+crypto.randomBytes(5).toString('hex').toUpperCase(),token=identity?.token||random(),created=new Date().toISOString();
   const snapshot=items.map(({p,qty})=>({id:p.id,name:p.name,qty,unit_price:p.price}));
   const order={id,customer_name,customer_email:email,subtotal,shipping_cost:freight,payment};
   let checkoutUrl='',mpPreferenceId='',pix=null;
   const marketingOptIn=data.marketingOptIn===true || data.marketingOptIn==='on';
   await db.transaction(async()=>{
-   await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id,marketing_opt_in) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+   const made=await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id,marketing_opt_in) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(id,hash(token),created,'pedido_criado',customer_name,phone,email,delivery==='pickup'?'':cep,delivery==='pickup'?'':address,delivery,payment,JSON.stringify(snapshot),subtotal,freight,assist?'Mercadoria paga online; corrida Uber/99 NÃO incluída no total. Negociar por WhatsApp após pagamento aprovado':delivery==='pickup'?'Retirada sem frete; '+(conf('SHOP_ADDRESS')||'endereço a informar'):'Melhor Envio · cotação selecionada',shippingService,mpPreferenceId,marketingOptIn);
-   // Uma compra sem marcar a opção NUNCA concede permissão para marketing.
+   if(!made.changes)return false;
+    // Reservar antes de chamar o provedor: duas sacolas não podem comprar a última unidade.
+    for(const line of [...items].sort((a,b)=>a.p.id.localeCompare(b.p.id))){
+     const current=await db.prepare('SELECT stock,stock_confirmed,active FROM products WHERE id=? FOR UPDATE').get(line.p.id);
+     if(!current||current.active!==1||current.stock_confirmed!==true||current.stock<line.qty)throw Object.assign(Error('Estoque insuficiente. Atualize a sacola antes de pagar.'),{status:409});
+     await db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(line.qty,line.p.id);
+    }
+    await db.prepare('UPDATE orders SET stock_reserved=? WHERE id=?').run(true,id);
+    // Uma compra sem marcar a opção NUNCA concede permissão para marketing.
    // Um opt-in registrado anteriormente não é apagado por uma compra posterior.
    await db.prepare(`INSERT INTO customers(email,name,phone,marketing_opt_in,marketing_consent_at,first_order_at,last_order_at,last_order_id)
     VALUES(?,?,?,?,CASE WHEN ? THEN NOW() ELSE NULL END,NOW(),NOW(),?)
@@ -340,7 +429,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   // O pedido existe antes de chamar o provedor; o webhook nunca chega sem pedido associado.
   if(payment==='card'){
    try{
-    const mp=await commerce.createPreference(conf,order,snapshot,token);
+    const mp=await cardCheckout(id,token);
     checkoutUrl=mp.checkoutUrl;mpPreferenceId=mp.preferenceId;
     await db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(mpPreferenceId,id);
    }catch(e){return json(res,502,{error:'Pedido registrado, mas o checkout de cartao nao foi gerado. Anote a referencia e procure a loja.',reference:id});}
@@ -368,7 +457,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/admin/session'&&method==='GET'){const s=await session(req);return json(res,200,{authenticated:!!s,email:s?.email||null,csrf:s?.csrf||null})}
  if(route==='/api/admin/login'&&method==='POST'){
  if(!rate(req,'login',7,900000))return problem(res,429,'Muitas tentativas; aguarde 15 minutos');if(!checkOrigin(req))return problem(res,403,'Origem não autorizada');const a=await body(req),email=str(a.email,180).toLowerCase(),pass=typeof a.password==='string'?a.password:'';
- const usr=(await db.prepare('SELECT * FROM admins WHERE email=?').get(email));const salt=usr?.salt||crypto.randomBytes(16).toString('hex'),correct=usr?.hash||crypto.randomBytes(64).toString('hex');const attempt=crypto.scryptSync(pass.slice(0,1000),salt,64).toString('hex');if(!usr||!crypto.timingSafeEqual(Buffer.from(attempt,'hex'),Buffer.from(correct,'hex')))return problem(res,401,'Credenciais inválidas');
+ const usr=(await db.prepare('SELECT * FROM admins WHERE email=?').get(email));const salt=usr?.salt||crypto.randomBytes(16).toString('hex'),correct=usr?.hash||crypto.randomBytes(64).toString('hex');const attempt=(await scrypt(pass.slice(0,1000),salt,64)).toString('hex');if(!usr||!crypto.timingSafeEqual(Buffer.from(attempt,'hex'),Buffer.from(correct,'hex')))return problem(res,401,'Credenciais inválidas');
  const token=random(),csrf=random();(await db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now()));(await db.prepare('INSERT INTO sessions(token_hash,email,csrf,expires) VALUES (?,?,?,?)').run(hash(token),email,csrf,Date.now()+8*3600000));
  res.setHeader('Set-Cookie',cookieValue(req,token));return json(res,200,{ok:true,csrf,email});
  }
@@ -376,6 +465,16 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  const s=await logged(req,res);if(!s)return;
  if(method!=='GET'&&!canWrite(req,s))return problem(res,403,'Sessão ou CSRF inválido');
  if(method!=='GET'&&route!=='/api/admin/logout'&&process.env.MAHACH_ENABLE_ADMIN_WRITES!=='true')return problem(res,503,'Gravações desativadas nesta versão. Reinicie o teste com MAHACH_ENABLE_ADMIN_WRITES=true depois de confirmar o backup e o banco de testes.');
+ if(route==='/api/admin/bling/connect'&&method==='POST'){
+  if(!rate(req,'bling-oauth',5,600000))return problem(res,429,'Aguarde para autorizar novamente');
+  const result=bling.start(hash(cookies(req).mahach_session));
+  res.setHeader('Set-Cookie','mahach_bling_state='+result.state+'; HttpOnly; Secure; SameSite=Lax; Path=/api/integrations/bling/callback; Max-Age=600');
+  return json(res,200,{url:result.url});
+ }
+ if(route==='/api/admin/launch-check'&&method==='GET'){
+ const catalog=await db.prepare("SELECT COUNT(*) total,COUNT(*) FILTER(WHERE active=1 AND stock_confirmed=true AND stock>0 AND price>0) with_confirmed_stock,COUNT(*) FILTER(WHERE active=1 AND shipping_confirmed=true AND weight>0 AND width>0 AND height>0 AND length>0) with_shipping,COUNT(*) FILTER(WHERE active=1 AND (sku IS NULL OR sku='')) without_sku FROM products").get();
+ return json(res,200,{catalog,paymentConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),requiresPaymentHomologation:true,notice:'Configuração presente não comprova cobrança, cotação ou entrega de e-mail reais.'});
+ }
  if(route==='/api/admin/capabilities'&&method==='GET')return json(res,200,{writes:process.env.MAHACH_ENABLE_ADMIN_WRITES==='true',checkout:process.env.MAHACH_ENABLE_CHECKOUT==='true',imageStorage:imageStorageStatus()});
 
  if(route==='/api/admin/settings'&&method==='GET')return json(res,200,{fields:settings.list(),notice:'Salvo no banco privado, refletido imediatamente no servidor. A edição do .env requer reiniciar o servidor; segredos ficam criptografados e não retornam ao navegador.'});
@@ -396,10 +495,10 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    if(!response.ok)return problem(res,502,'Melhor Envio respondeu HTTP '+response.status+' ao consultar etiquetas.');
    return json(res,200,{ok:true,message:'Melhor Envio autenticou com sucesso na API oficial.'});
   }
-  if(provider==='mercado-pago'){
-   const token=conf('MERCADO_PAGO_ACCESS_TOKEN');if(!token)return problem(res,400,'Configure o Access Token');
+  if(provider==='mercado-pago'||provider==='mercado-pago-pix'){
+   const token=commerce.accessToken(provider==='mercado-pago-pix'?commerce.pixConfiguration(conf):conf);if(!token)return problem(res,400,'Configure o Access Token');
    const response=await fetch('https://api.mercadopago.com/users/me',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},signal:AbortSignal.timeout(10000)});
-   if(!response.ok)return problem(res,502,'Mercado Pago recusou autenticação (HTTP '+response.status+')');return json(res,200,{ok:true,message:'Credencial Mercado Pago válida. Cobranças ainda não estão ativadas.'});
+   if(!response.ok)return problem(res,502,'Mercado Pago recusou autenticação (HTTP '+response.status+')');return json(res,200,{ok:true,message:'Token aceito na consulta da conta. Isto não homologa Pix, cartão ou permissões de cobrança.'});
   }
   if(provider==='email'){
    if(!conf('RESEND_API_KEY')||!conf('MAIL_FROM')||!conf('ADMIN_EMAIL'))return problem(res,400,'Configure API Key, remetente verificado e e-mail da loja');
@@ -407,7 +506,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    if(!result.ok)return problem(res,502,result.reason);
    return json(res,200,{ok:true,message:'E-mail de teste aceito pelo provedor. Confirme a chegada na caixa de entrada.'});
   }
-  if(provider==='bling')return json(res,200,{ok:false,message:'Bling exige o fluxo OAuth 2.0 e autorização da sua conta; salvar Client ID/Secret não conclui a conexão.'});
+  if(provider==='bling')return json(res,200,await bling.test());
   return problem(res,400,'Integração desconhecida');
  }
 
@@ -436,11 +535,11 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/admin/stats'&&method==='GET')return json(res,200,{products:(await db.prepare('SELECT COUNT(*) n FROM products').get()).n,photos:(await db.prepare("SELECT COUNT(*) n FROM products WHERE image<>''").get()).n,orders:(await db.prepare('SELECT COUNT(*) n FROM orders').get()).n,customers:(await db.prepare('SELECT COUNT(*) n FROM customers').get()).n,pending:(await db.prepare("SELECT COUNT(*) n FROM orders WHERE status IN ('pedido_criado','aguardando_confirmacao')").get()).n,outOfStock:(await db.prepare('SELECT COUNT(*) n FROM products WHERE stock=0 AND active=1').get()).n,visible:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n,categories:(await db.prepare('SELECT COUNT(*) n FROM categories').get()).n,vendizapConfigured:!!(conf('VENDIZAP_ID')&&conf('VENDIZAP_SECRET')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),blingConfigured:!!(conf('BLING_CLIENT_ID')&&conf('BLING_CLIENT_SECRET')),mercadoPagoConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL'))});
  if(route==='/api/admin/import-csv'&&method==='POST'){if(!rate(req,'import',4,3600000))return problem(res,429,'Limite de importações excedido');const raw=await bodyCsv(req);try{return json(res,200,await importIntoPg(db,raw,searchText,secureUrl))}catch(e){return problem(res,400,e.message)}}
  if(route==='/api/admin/products'&&method==='GET'){
- const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number(u.searchParams.get('page'))||1));const where=q?'WHERE name ILIKE ? OR brand ILIKE ?':'',args=q?['%'+q+'%','%'+q+'%']:[];
+ const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number.parseInt(u.searchParams.get('page'),10)||1));const where=q?'WHERE name ILIKE ? OR brand ILIKE ? OR sku ILIKE ? OR id=?':'',args=q?['%'+q+'%','%'+q+'%','%'+q+'%',q]:[];
  return json(res,200,{total:(await db.prepare('SELECT COUNT(*) n FROM products '+where).get(...args)).n,products:(await db.prepare('SELECT * FROM products '+where+' ORDER BY name LIMIT 30 OFFSET ?').all(...args,(p-1)*30)),page:p});
  }
  if(route==='/api/admin/products'&&method==='POST'){
- const p=await validProduct(await body(req));p.id='custom-'+crypto.randomBytes(12).toString('hex');(await db.prepare('INSERT INTO products(id,name,price,description,category,brand,family,image,sku,stock,weight,width,height,length,active,search_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id,p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text));return json(res,201,{id:p.id});
+ const p=await validProduct(await body(req));p.id='custom-'+crypto.randomBytes(12).toString('hex');(await db.prepare('INSERT INTO products(id,name,price,description,category,brand,family,image,sku,stock,weight,width,height,length,active,search_text,stock_confirmed,shipping_confirmed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id,p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,p.stock_confirmed,p.shipping_confirmed));return json(res,201,{id:p.id});
  }
  const edit=route.match(/^\/api\/admin\/products\/([\w-]{5,80})$/);
  // Ocultar sem apagar fisicamente: preserva histórico e referências de pedidos.
@@ -449,7 +548,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   return removed.changes?json(res,200,{ok:true,archived:true}):problem(res,404,'Produto não encontrado');
  }
  if(edit&&method==='PUT'){
- if(!(await db.prepare('SELECT id FROM products WHERE id=?').get(edit[1])))return problem(res,404,'Produto não encontrado');const p=await validProduct(await body(req));(await db.prepare('UPDATE products SET name=?,price=?,description=?,category=?,brand=?,family=?,image=?,sku=?,stock=?,weight=?,width=?,height=?,length=?,active=?,search_text=? WHERE id=?').run(p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,edit[1]));return json(res,200,{ok:true});
+ if(!(await db.prepare('SELECT id FROM products WHERE id=?').get(edit[1])))return problem(res,404,'Produto não encontrado');const p=await validProduct(await body(req),edit[1]);(await db.prepare('UPDATE products SET name=?,price=?,description=?,category=?,brand=?,family=?,image=?,sku=?,stock=?,weight=?,width=?,height=?,length=?,active=?,search_text=?,stock_confirmed=?,shipping_confirmed=? WHERE id=?').run(p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,p.stock_confirmed,p.shipping_confirmed,edit[1]));return json(res,200,{ok:true});
  }
  if(route==='/api/admin/categories'&&method==='GET')return json(res,200,{categories:(await db.prepare('SELECT * FROM categories ORDER BY name').all())});
  if(route==='/api/admin/categories'&&method==='POST'){
@@ -471,17 +570,28 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const results={};
   if(o.payment_status==='aprovado')results.purchase=await sendTransactional(o.id,'approved');
   else if(o.payment==='cash')results.receipt=await sendTransactional(o.id,'created');
-  if(o.delivery==='correios'&&o.tracking_code)results.tracking=await sendTransactional(o.id,'tracking');
+  if(['correios','transportadora'].includes(o.delivery)&&o.tracking_code)results.tracking=await sendTransactional(o.id,'tracking');
   return json(res,200,{ok:true,results});
  }
  const orderEdit=route.match(/^\/api\/admin\/orders\/(MH-[A-Z0-9]+)$/);
  if(orderEdit&&method==='PUT'){
- const x=await body(req),status=str(x.status,40),tracking_code=str(x.tracking_code,100),tracking_url=secureUrl(str(x.tracking_url,1500));if(!['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','enviado','pronto_retirada','concluido','cancelado'].includes(status))return problem(res,400,'Status inválido');const old=(await db.prepare('SELECT delivery,payment,payment_status,tracking_code FROM orders WHERE id=?').get(orderEdit[1]));if(!old)return problem(res,404,'Pedido não encontrado');
- if(['pix','card'].includes(old.payment)&&status==='pagamento_aprovado'&&old.payment_status!=='aprovado')return problem(res,409,'Pagamento online deve ser aprovado pelo Mercado Pago, nunca manualmente');
+ const x=await body(req),status=str(x.status,40),tracking_code=str(x.tracking_code,100),tracking_url=secureUrl(str(x.tracking_url,1500));if(!['pedido_criado','aguardando_confirmacao','pagamento_aprovado','estoque_pendente','em_preparacao','embalado','enviado','pronto_retirada','concluido','cancelado'].includes(status))return problem(res,400,'Status inválido');const old=(await db.prepare('SELECT delivery,payment,payment_status,tracking_code,status FROM orders WHERE id=?').get(orderEdit[1]));if(!old)return problem(res,404,'Pedido não encontrado');
+ if(['pix','card'].includes(old.payment)&&['pagamento_aprovado','em_preparacao','embalado','enviado','pronto_retirada','concluido'].includes(status)&&old.payment_status!=='aprovado')return problem(res,409,'Pagamento online deve ser aprovado pelo Mercado Pago, nunca manualmente');
+ if(status==='enviado'&&['correios','transportadora'].includes(old.delivery)&&(!tracking_code||!tracking_url))return problem(res,400,'Informe código e link HTTPS da transportadora antes de marcar como enviado');
  const changed=old.tracking_code!==tracking_code;
- (await db.prepare("UPDATE orders SET status=?,tracking_code=?,tracking_url=?,payment_status=CASE WHEN ?='pagamento_aprovado' AND payment='cash' THEN 'aprovado' ELSE payment_status END,tracking_email_sent=CASE WHEN tracking_code<>? THEN 0 ELSE tracking_email_sent END WHERE id=?").run(status,tracking_code,tracking_url,status,tracking_code,orderEdit[1]));
- const mail=old.delivery==='correios'&&tracking_code&&changed&&['em_preparacao','enviado','concluido'].includes(status)?await sendTransactional(orderEdit[1],'tracking'):{};
- return json(res,200,{ok:true,email:mail});
+ await db.transaction(async()=>{
+  const current=await db.prepare('SELECT * FROM orders WHERE id=? FOR UPDATE').get(orderEdit[1]);
+  if(current.payment==='cash'&&current.stock_reserved){
+   if(status==='cancelado'&&current.payment_status!=='aprovado'){
+    for(const item of JSON.parse(current.items_json).sort((a,b)=>String(a.id).localeCompare(String(b.id))))await db.prepare('UPDATE products SET stock=stock+? WHERE id=?').run(item.qty,item.id);
+    await db.prepare('UPDATE orders SET stock_reserved=? WHERE id=?').run(false,current.id);
+   }else if(status==='pagamento_aprovado')await db.prepare('UPDATE orders SET stock_reserved=? WHERE id=?').run(false,current.id);
+  }
+  await db.prepare("UPDATE orders SET status=?,tracking_code=?,tracking_url=?,payment_status=CASE WHEN ?='pagamento_aprovado' AND payment='cash' THEN 'aprovado' ELSE payment_status END,tracking_email_sent=CASE WHEN tracking_code<>? THEN 0 ELSE tracking_email_sent END WHERE id=?").run(status,tracking_code,tracking_url,status,tracking_code,orderEdit[1]);
+ });
+ const mail=['correios','transportadora'].includes(old.delivery)&&tracking_code&&changed&&['enviado','concluido'].includes(status)?await sendTransactional(orderEdit[1],'tracking'):{};
+ let statusEmail={};if(old.status!==status)try{statusEmail=await sendTransactional(orderEdit[1],status==='pagamento_aprovado'?'approved':'status')}catch{statusEmail={customer:{ok:false,reason:'Notificação pendente'}}}
+ return json(res,200,{ok:true,email:mail,statusEmail});
  }
  if(route==='/api/admin/bling/preview'&&method==='GET'){
  const skuById=new Map((await db.prepare('SELECT id,sku FROM products').all()).map(p=>[p.id,p.sku]));
@@ -495,10 +605,12 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  }
  return problem(res,404,'Rota não encontrada');
 }
-const server=http.createServer(async(req,res)=>{
+const server=http.createServer({requestTimeout:30000,headersTimeout:15000,maxHeaderSize:16384},async(req,res)=>{
  security(res);
  if(!rate(req,'general',800,60000))return problem(res,429,'Limite de requisições');
- try{await ready;const u=new URL(req.url,'http://localhost');if(u.pathname.startsWith('/api/'))await api(req,res,u);else if(['GET','HEAD'].includes(req.method))await staticFile(req,res,u);else problem(res,405,'Método não permitido')}catch(e){if(process.env.NODE_ENV!=='production'&&!e.status)console.error(e);problem(res,e.status||500,e.status?e.message:'Erro interno. Tente novamente.')}
+ try{await ready;const u=new URL(req.url,'http://localhost');if(u.pathname.startsWith('/api/')||u.pathname==='/robots.txt'||u.pathname==='/sitemap.xml')await api(req,res,u);else if(['GET','HEAD'].includes(req.method))await staticFile(req,res,u);else problem(res,405,'Método não permitido')}catch(e){if(process.env.NODE_ENV!=='production'&&!e.status)console.error(e);problem(res,e.code==='23505'?409:e.status||500,e.code==='23505'?'SKU ou identificador já utilizado':e.status?e.message:'Erro interno. Tente novamente.')}
 });
-if(require.main===module){ready.then(()=>server.listen(Number(process.env.PORT)||3000,process.env.HOST||'0.0.0.0',()=>console.log('MAHACH PostgreSQL iniciado na porta '+(process.env.PORT||3000)))).catch(e=>{console.error('Falha na inicialização PostgreSQL:',e.message);process.exitCode=1;db.close().catch(()=>{})})}
+if(require.main===module){
+ process.once('SIGTERM',()=>{server.close(()=>db.close().catch(()=>{}));setTimeout(()=>{server.closeAllConnections();db.close().catch(()=>{})},25000).unref()});
+ ready.then(()=>server.listen(Number(process.env.PORT)||3000,process.env.HOST||'0.0.0.0',()=>console.log('MAHACH PostgreSQL iniciado na porta '+(process.env.PORT||3000)))).catch(e=>{console.error('Falha na inicialização PostgreSQL:',e.message);process.exitCode=1;db.close().catch(()=>{})})}
 module.exports={server,db,ready,searchText};

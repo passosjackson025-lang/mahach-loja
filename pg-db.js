@@ -10,7 +10,8 @@ if(!databaseUrl) {
  throw Error('DATABASE_URL inválida: não é seguro iniciar sem a conexão PostgreSQL');
 }
 const pool=new Pool({connectionString:databaseUrl,ssl:{rejectUnauthorized:true},max:5,
- connectionTimeoutMillis:12000,idleTimeoutMillis:30000});
+ connectionTimeoutMillis:12000,idleTimeoutMillis:30000,statement_timeout:20000,idle_in_transaction_session_timeout:30000});
+pool.on?.('error',()=>console.error('[Banco MAHACH] conexão ociosa interrompida'));
 const TABLES='admins|categories|products|orders|site_settings|sessions|customers';
 const objRe=new RegExp('\\b(FROM|JOIN|INTO|UPDATE|TABLE|REFERENCES)\\s+(?!mahach_stage\\.)(?:"?)('+TABLES+')(?:"?)\\b','gi');
 function sqlize(sql) {
