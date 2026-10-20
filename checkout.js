@@ -39,17 +39,17 @@
   </div>
 
  </form>
- <div id="orderSuccess" tabindex="-1" hidden><span class="order-eyebrow">MAHACH · ACOMPANHAMENTO</span><h3 id="orderHeading">Pedido registrado</h3><p id="orderReference"></p><p id="orderInstructions">Acompanhe seu pedido e aguarde as informacoes da loja.</p>
+  <div id="orderSuccess" tabindex="-1" hidden><span class="order-eyebrow">MAHACH · PAGAMENTO</span><h3 id="orderHeading">Pedido registrado</h3><p id="orderReference"></p><p id="orderInstructions">Seu pedido foi registrado.</p>
   <section id="orderPix" class="mahach-pix" hidden aria-label="Pagamento Pix">
    <p><strong>Pix da sua compra</strong> — use o app do seu banco para pagar.</p>
-   <p id="pixUnavailableMessage" class="pix-unavailable" role="status" hidden>O Mercado Pago ainda não disponibilizou os dados do Pix. Tente novamente para este mesmo pedido.</p>
+   <p id="pixUnavailableMessage" class="pix-unavailable" role="status" hidden>O Pix ainda não está disponível. Você pode tentar novamente sem criar outro pedido.</p>
    <img id="pixQrImage" alt="QR Code de pagamento Pix gerado pelo Mercado Pago" width="230" height="230" hidden>
    <label id="pixCopyLabel" hidden>Pix Copia e Cola<textarea id="pixCopyValue" readonly rows="3" aria-label="Codigo Pix Copia e Cola"></textarea></label>
    <button type="button" id="pixCopyButton" class="quote-button">Copiar codigo Pix</button>
    <button type="button" id="pixRetryButton" class="quote-button" hidden>Tentar carregar o Pix novamente</button>
    <p id="pixStatus" role="status" aria-live="polite">Aguardando confirmacao do Mercado Pago...</p>
   </section>
-  <a id="orderTrack" class="consult-link" target="_blank" rel="noopener noreferrer">Acompanhar pedido</a></div>
+  <a id="orderTrack" class="consult-link" target="_blank" rel="noopener noreferrer" hidden>Acompanhar entrega</a></div>
  </div></div>
   <aside class="mahach-checkout-side" aria-label="Resumo do pedido">
    <div class="mahach-side-top"><div class="mahach-side-label">MAHACH · SEU PEDIDO</div><h3>Seu pedido</h3><p id="mahachSummaryCount"></p></div>
@@ -97,7 +97,7 @@
   if(pixPoll)clearInterval(pixPoll);pixPoll=null;activeOrder=null;
   d.classList.remove('mahach-success');selectedQuote='';selectedCost=null;form.reset();clearTimeout(cepTimer);++cepRequest;q('cepLookupStatus').textContent='';
   q('orderPix').hidden=true;q('pixQrImage').hidden=true;q('pixQrImage').removeAttribute('src');q('pixCopyValue').value='';q('pixCopyLabel').hidden=true;q('pixUnavailableMessage').hidden=true;q('pixCopyButton').hidden=true;q('pixRetryButton').hidden=true;
-  d.querySelector('.checkout-head-sub').hidden=false;q('checkoutTitle').textContent='Finalizar compra.';q('orderHeading').textContent='Pedido registrado';q('orderSuccess').hidden=true;d.querySelector('.checkout-steps').hidden=false;d.querySelector('.checkout-intro').hidden=false;
+  d.querySelector('.checkout-head-sub').hidden=false;q('checkoutTitle').textContent='Finalizar compra.';q('orderHeading').textContent='Pedido registrado';q('orderHeading').hidden=false;q('orderReference').hidden=false;q('orderInstructions').hidden=false;q('orderTrack').hidden=true;q('orderPix').hidden=true;q('orderSuccess').dataset.phase='';q('orderSuccess').hidden=true;d.querySelector('.checkout-steps').hidden=false;d.querySelector('.checkout-intro').hidden=false;
   items=Object.entries(bag).map(([id,qty])=>({id,qty,p:map.get(id)})).filter(x=>x.p);
   renderSummaryProducts();
   q('orderSuccess').hidden=true;q('checkoutError').hidden=true;q('shippingResults').replaceChildren();q('shippingSelection').textContent='';
@@ -184,21 +184,40 @@
  });
  function showRegisteredOrder(result){
   activeOrder={reference:result.reference,token:result.token};
+  const isPix=result.mode==='pix'||result.mode==='pix-retry';
   form.hidden=true;side.hidden=true;d.classList.add('mahach-success');q('orderSuccess').hidden=false;d.querySelector('.checkout-steps').hidden=true;d.querySelector('.checkout-intro').hidden=true;
-  d.querySelector('.checkout-head-sub').hidden=true;q('checkoutTitle').textContent='Acompanhar pedido';q('orderHeading').textContent=result.mode==='pix-retry'?'Pagamento ainda não gerado':result.mode==='pix'?'Aguardando pagamento Pix':'Pedido registrado';
-  d.scrollTop=0;q('orderSuccess').focus({preventScroll:true});
-  q('orderReference').textContent='Pedido: '+result.reference;
-  q('orderInstructions').textContent=result.notice||'Acompanhe o seu pedido.';
+  d.querySelector('.checkout-head-sub').hidden=true;
+  q('checkoutTitle').textContent=isPix?'Pagamento Pix':'Pedido registrado';
+  q('orderSuccess').dataset.phase=isPix?'payment':'registered';
+  q('orderSuccess').querySelector('.order-eyebrow').textContent=isPix?'MAHACH · PAGAMENTO SEGURO':'MAHACH · PEDIDO';
+  q('orderHeading').hidden=isPix;q('orderHeading').textContent='Pedido registrado';
+  q('orderReference').textContent='Pedido: '+result.reference;q('orderReference').hidden=isPix;
+  q('orderInstructions').textContent=isPix?'':(result.notice||'Pedido recebido. Aguarde a confirmação da loja.');q('orderInstructions').hidden=isPix;
+  q('orderTrack').hidden=true;
   const track=new URL('/acompanhar.html',location.origin);track.searchParams.set('reference',result.reference);track.searchParams.set('token',result.token);q('orderTrack').href=track.href;
+  d.scrollTop=0;q('orderSuccess').focus({preventScroll:true});
+ }
+ // O pagamento tem a propria tela. Acompanhamento so aparece apos aprovacao no servidor.
+ function showPaymentConfirmed(){
+  if(!activeOrder)return;
+  q('orderSuccess').dataset.phase='confirmed';
+  q('checkoutTitle').textContent='Pagamento confirmado';
+  q('orderSuccess').querySelector('.order-eyebrow').textContent='MAHACH · COMPRA CONFIRMADA';
+  q('orderHeading').hidden=false;q('orderHeading').textContent='Pagamento aprovado!';
+  q('orderReference').hidden=false;
+  q('orderInstructions').hidden=false;q('orderInstructions').textContent='Pagamento confirmado pelo Mercado Pago. O pedido segue agora para a loja. Acompanhe o preparo e o envio na página do seu pedido.';
+  q('orderPix').hidden=true;q('orderTrack').hidden=false;
+  if(pixPoll)clearInterval(pixPoll);pixPoll=null;
+  d.scrollTop=0;
  }
  function showPixPending(message,diagnostic){
   const section=q('orderPix');section.hidden=false;
   const img=q('pixQrImage');img.hidden=true;img.removeAttribute('src');
   q('pixCopyValue').value='';q('pixCopyLabel').hidden=true;q('pixCopyButton').hidden=true;
   q('pixRetryButton').hidden=false;q('pixUnavailableMessage').hidden=false;
-  q('pixStatus').textContent=message||'Não foi possível gerar o Pix agora. Tente novamente sem criar outro pedido.';
+  q('pixStatus').textContent='Ainda não foi possível carregar os dados do Pix.';
   if(diagnostic && /^[A-Z0-9_-]{3,90}$/.test(String(diagnostic)))q('pixStatus').textContent+=' Referência técnica: '+diagnostic+'.';
-  q('orderHeading').textContent='Aguardando geração do Pix';
+  q('orderSuccess').dataset.phase='payment';
  }
  function renderPix(pix){
   const section=q('orderPix');section.hidden=false;
@@ -213,7 +232,7 @@
   }
   q('pixRetryButton').hidden=true;q('pixCopyButton').hidden=false;
   q('pixStatus').textContent=img.hidden?'QR Code indisponível no momento. Use o Pix Copia e Cola. Aguarde a confirmação.':'Aguardando confirmação do Mercado Pago. Não pague duas vezes.';
-  q('orderHeading').textContent='Aguardando pagamento Pix';
+  q('orderSuccess').dataset.phase='payment';
   startPixPolling();
  }
  q('pixQrImage').addEventListener('error',()=>{
@@ -226,12 +245,7 @@
    const response=await fetch('/api/payments/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(activeOrder),cache:'no-store'});
    if(!response.ok)return;
    const data=await response.json();
-   if(data.paymentStatus==='aprovado'){
-    q('pixStatus').textContent='Pagamento confirmado pelo Mercado Pago! Seu pedido sera preparado.';
-    q('orderInstructions').textContent='Pagamento aprovado! Acompanhe seu pedido.';
-    q('pixQrImage').hidden=true;q('pixQrImage').removeAttribute('src');q('pixCopyValue').value='';q('pixCopyLabel').hidden=true;q('pixCopyButton').hidden=true;q('pixRetryButton').hidden=true;q('pixUnavailableMessage').hidden=true;q('orderHeading').textContent='Pagamento confirmado';
-    clearInterval(pixPoll);pixPoll=null;
-   }
+   if(data.paymentStatus==='aprovado')showPaymentConfirmed();
   }catch{} // O webhook e a consulta segura ao servidor confirmam o pagamento.
  }
  function startPixPolling(){if(pixPoll)clearInterval(pixPoll);pollPix();pixPoll=setInterval(pollPix,6500)}
@@ -246,7 +260,7 @@
   try{
    const response=await fetch('/api/payments/pix/retry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...activeOrder,pixCpf:form.elements.pixCpf.value})});
    const data=await response.json();if(!response.ok)throw Error((data.error||'Nao foi possivel gerar Pix')+(data.diagnostic?' Referência técnica: '+String(data.diagnostic).slice(0,90):''));
-   if(data.paid){q('pixStatus').textContent='Pagamento aprovado.';q('orderHeading').textContent='Pagamento confirmado';b.hidden=true;startPixPolling();return;}
+   if(data.paid){showPaymentConfirmed();return;}
    renderPix(data.pix);
   }catch(err){showPixPending(err.message||'Não foi possível gerar o Pix agora. Tente novamente para o mesmo pedido.');}finally{b.disabled=false}
  });
@@ -274,7 +288,7 @@
    showRegisteredOrder(result);
    if(result.mode==='pix')renderPix(result.pix);
    else if(result.mode==='pix-retry'){
-    showPixPending('O pedido foi registrado, mas a cobrança Pix ainda não foi gerada. Tente novamente sem criar outro pedido.',result.diagnostic);
+    showPixPending('Não foi possível carregar o Pix.',result.diagnostic);
    }
   }catch(err){error.textContent=err.message;error.hidden=false}finally{b.disabled=false;updateSubmitLabel()}
  });

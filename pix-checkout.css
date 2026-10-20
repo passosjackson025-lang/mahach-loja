@@ -239,3 +239,13 @@
  .checkout-dialog.mahach-split .mahach-product-thumbnail{width:50px;height:56px}
 }
 @media(prefers-reduced-motion:reduce){.checkout-dialog.mahach-split *{animation:none!important;transition:none!important}}
+
+/* MAHACH V8 — etapas separadas: pagar Pix, confirmado, acompanhar. */
+#checkoutDialog.mahach-split.mahach-success #orderSuccess[data-phase="payment"]{max-width:570px!important;margin-inline:auto!important;padding:20px 0 30px!important}
+#checkoutDialog.mahach-split.mahach-success #orderSuccess[data-phase="payment"] .mahach-pix{margin:0!important;padding:23px!important}
+#checkoutDialog.mahach-split.mahach-success #orderSuccess[data-phase="payment"] #pixStatus{font-size:12px!important}
+#checkoutDialog.mahach-split.mahach-success #orderSuccess[data-phase="confirmed"]{max-width:570px!important;margin-inline:auto!important;text-align:center!important;padding:26px 0 35px!important}
+#checkoutDialog.mahach-split.mahach-success #orderSuccess[data-phase="confirmed"] #orderReference{display:inline-block;padding:8px 12px;background:#faf6ee;border:1px solid #e5d9ca;border-radius:9px}
+#checkoutDialog.mahach-split.mahach-success #orderSuccess[data-phase="confirmed"] #orderTrack{margin-top:12px}
+#checkoutDialog.mahach-split #orderTrack[hidden],#checkoutDialog.mahach-split #orderHeading[hidden],#checkoutDialog.mahach-split #orderReference[hidden],#checkoutDialog.mahach-split #orderInstructions[hidden]{display:none!important}
+@media(max-width:560px){#checkoutDialog.mahach-split.mahach-success #orderSuccess[data-phase="payment"] .mahach-pix{padding:16px!important}}
