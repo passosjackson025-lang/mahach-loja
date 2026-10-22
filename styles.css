@@ -335,3 +335,55 @@ footer .footer-bottom{color:#c1ae99!important}
 footer a:hover{color:#fff!important}
 @media(max-width:980px){body[data-page="catalog"] .site-header{min-height:80px}body[data-page="home"] .closing h2{max-width:100%}}
 @media(prefers-reduced-motion:reduce){body[data-page="home"] .elexier-opening *{animation:none!important;transition:none!important}html{scroll-behavior:auto!important}}
+
+/* ELEXIER V12 — somente continuidade do degradê + quatro destaques interativos.
+   A arte 1536x1024 da referencia permanece INTACTA. */
+body[data-page="home"] .elexier-continuum{
+ background:linear-gradient(180deg,#e5ddd0 0%,#e8e0d5 19%,#dfd4c8 41%,#c5b7a9 66%,#a29182 84%,#79695e 100%);
+ isolation:isolate;
+}
+body[data-page="home"] .elexier-continuum > :is(.collection-strip,.statement,.elexier-about,.closing){
+ background:transparent!important;
+}
+body[data-page="home"] .elexier-continuum :is(.statement,.closing,.elexier-about){
+ border-top-color:transparent!important;border-bottom-color:transparent!important;
+}
+body[data-page="home"] footer{
+ background:linear-gradient(180deg,#79695e 0%,#453930 44%,#141210 100%)!important;
+ border-top:0!important;
+}
+body[data-page="home"] .elexier-feature-hotspots{
+ position:absolute;inset:0;pointer-events:none;z-index:12;
+}
+body[data-page="home"] .elexier-hotspot{
+ position:absolute;left:var(--px);top:var(--py);width:var(--pw);height:var(--ph);
+ display:block;pointer-events:auto;cursor:pointer;
+ outline-offset:3px;border-radius:9px;perspective:500px;
+ -webkit-tap-highlight-color:transparent;
+}
+body[data-page="home"] .elexier-hotspot img{
+ display:block;width:100%;height:100%;object-fit:contain;opacity:0;
+ transform-origin:50% 85%;transform:translate3d(0,0,0) rotateY(0deg) scale(1);
+ pointer-events:none;will-change:transform,opacity;
+ transition:transform .45s cubic-bezier(.16,.74,.19,1),opacity .3s ease,filter .4s ease;
+}
+body[data-page="home"] .elexier-hotspot:is(:hover,:focus-visible) img{
+ opacity:1;transform:translate3d(0,-5%,12px) rotateY(-5deg) rotateX(3deg) scale(1.055);
+ filter:drop-shadow(0 10px 8px rgba(22,15,10,.42));
+}
+body[data-page="home"] .elexier-hotspot:focus-visible{outline:2px solid #5d4731;background:#e8dcc02b}
+.elexier-sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* No mobile, os mesmos quatro links cobrem a arte responsiva da faixa. */
+@media(max-width:980px){
+ body[data-page="home"] .elexier-feature-hotspots{inset:auto 0 5px auto;left:30%;width:50%;height:125px;display:grid;grid-template-columns:repeat(4,1fr);align-items:end;gap:0}
+ body[data-page="home"] .elexier-hotspot{position:relative;left:auto;top:auto;width:100%;height:90px;border-radius:4px}
+ body[data-page="home"] .elexier-hotspot img{display:none}
+ body[data-page="home"] .elexier-hotspot:is(:hover,:focus-visible){box-shadow:inset 0 0 0 1px #97877380;background:#b6a38f1a}
+}
+@media(max-width:700px){
+ body[data-page="home"] .elexier-feature-hotspots{left:25%;width:55%;height:85px;bottom:5px}
+ body[data-page="home"] .elexier-hotspot{height:70px}
+}
+@media(prefers-reduced-motion:reduce){
+ body[data-page="home"] .elexier-hotspot img{transition:none!important;transform:none!important;will-change:auto!important}
+}

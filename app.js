@@ -160,6 +160,9 @@ async function init(){try{const out=await request('/api/meta'+($('#products')?'?
  $('#openFilters').onclick=e=>openDialog($('#filterDialog'),e.currentTarget);
  if(location.hash==='#busca')searchInput.focus();
  await loadProducts();
+ // Link direto aos produtos da faixa ELEXIER; usa o modal ja existente.
+ const featuredId=catalogParams.get('produto');
+ if(featuredId&&/^[a-f0-9]{24}$/.test(featuredId))await detail(featuredId,$('#catalogTitle')||$('#products'));
  }
  await restoreBag();
  $$('a[href^="https://wa.me/5511995209827"]').forEach(a=>{if(!a.search)a.href=wa('Olá, Elexier! Gostaria de mais informações sobre os produtos e a loja.')});
