@@ -3,7 +3,7 @@
 (function(){
  const markup=`<dialog class="checkout-dialog mahach-split" id="checkoutDialog" aria-labelledby="checkoutTitle">
  <div class="mahach-shell"><div class="mahach-shell-light">
- <div class="checkout-head"><div><span class="eyebrow">MAHACH · SUA COMPRA</span><h2 id="checkoutTitle">Finalizar compra.</h2><p class="checkout-head-sub">Perfumaria selecionada, compra com segurança.</p></div><button type="button" data-checkout-close aria-label="Fechar">×</button></div>
+ <div class="checkout-head"><div><span class="eyebrow">ELEXIER · SUA COMPRA</span><h2 id="checkoutTitle">Finalizar compra.</h2><p class="checkout-head-sub">Perfumaria selecionada, compra com segurança.</p></div><button type="button" data-checkout-close aria-label="Fechar">×</button></div>
  <div class="checkout-body"><div class="checkout-steps" aria-label="Etapas"><span>Dados</span><span>Entrega</span><span>Pagamento</span><span>Resumo</span></div>
  <p class="checkout-intro">Confira seus dados, a entrega e o pagamento. No Pix, o QR Code aparece após registrar o pedido.</p>
  <form id="checkoutForm" class="mahach-checkout-layout">
@@ -33,13 +33,13 @@
    <label><input type="radio" name="payment" value="cash"> Pagar na retirada <small>Somente retirada na loja</small></label>
   </div></fieldset>
   <p class="checkout-notice" id="checkoutShippingNotice">Retirada sem frete. Confirme o endereço e o horário antes de ir à loja.</p>
-  <label class="checkout-marketing"><input type="checkbox" name="marketingOptIn" value="on"> Quero receber ofertas e novidades da MAHACH por e-mail e WhatsApp. Posso cancelar a autorização quando quiser.</label>
-  <p class="checkout-legal">Usaremos seus dados para processar o pedido, mesmo que você não aceite marketing. Consulte a <a href="/privacidade.html" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>. A MAHACH não recebe nem armazena os dados completos do cartão.</p>
+  <label class="checkout-marketing"><input type="checkbox" name="marketingOptIn" value="on"> Quero receber ofertas e novidades da ELEXIER por e-mail e WhatsApp. Posso cancelar a autorização quando quiser.</label>
+  <p class="checkout-legal">Usaremos seus dados para processar o pedido, mesmo que você não aceite marketing. Consulte a <a href="/privacidade.html" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>. A ELEXIER não recebe nem armazena os dados completos do cartão.</p>
   <p id="checkoutError" class="checkout-error" role="alert" hidden></p>
   </div>
 
  </form>
-  <div id="orderSuccess" tabindex="-1" hidden><span class="order-eyebrow">MAHACH · PAGAMENTO</span><h3 id="orderHeading">Pedido registrado</h3><p id="orderReference"></p><p id="orderInstructions">Seu pedido foi registrado.</p>
+  <div id="orderSuccess" tabindex="-1" hidden><span class="order-eyebrow">ELEXIER · PAGAMENTO</span><h3 id="orderHeading">Pedido registrado</h3><p id="orderReference"></p><p id="orderInstructions">Seu pedido foi registrado.</p>
   <section id="orderPix" class="mahach-pix" hidden aria-label="Pagamento Pix">
    <p><strong>Pix da sua compra</strong> — use o app do seu banco para pagar.</p>
    <p id="pixUnavailableMessage" class="pix-unavailable" role="status" hidden>O Pix ainda não está disponível. Você pode tentar novamente sem criar outro pedido.</p>
@@ -52,7 +52,7 @@
   <a id="orderTrack" class="consult-link" target="_blank" rel="noopener noreferrer" hidden>Acompanhar entrega</a></div>
  </div></div>
   <aside class="mahach-checkout-side" aria-label="Resumo do pedido">
-   <div class="mahach-side-top"><div class="mahach-side-label">MAHACH · SEU PEDIDO</div><h3>Seu pedido</h3><p id="mahachSummaryCount"></p></div>
+   <div class="mahach-side-top"><div class="mahach-side-label">ELEXIER · SEU PEDIDO</div><h3>Seu pedido</h3><p id="mahachSummaryCount"></p></div>
    <div id="mahachSummaryItems" class="mahach-summary-products"></div>
    <div class="checkout-total checkout-summary" id="checkoutTotal" role="status" aria-live="polite"></div>
    <button class="button" id="submitOrder" form="checkoutForm" type="submit">Continuar para pagamento →</button>
@@ -189,7 +189,7 @@
   d.querySelector('.checkout-head-sub').hidden=true;
   q('checkoutTitle').textContent=isPix?'Pagamento Pix':'Pedido registrado';
   q('orderSuccess').dataset.phase=isPix?'payment':'registered';
-  q('orderSuccess').querySelector('.order-eyebrow').textContent=isPix?'MAHACH · PAGAMENTO SEGURO':'MAHACH · PEDIDO';
+  q('orderSuccess').querySelector('.order-eyebrow').textContent=isPix?'ELEXIER · PAGAMENTO SEGURO':'ELEXIER · PEDIDO';
   q('orderHeading').hidden=isPix;q('orderHeading').textContent='Pedido registrado';
   q('orderReference').textContent='Pedido: '+result.reference;q('orderReference').hidden=isPix;
   q('orderInstructions').textContent=isPix?'':(result.notice||'Pedido recebido. Aguarde a confirmação da loja.');q('orderInstructions').hidden=isPix;
@@ -202,7 +202,7 @@
   if(!activeOrder)return;
   q('orderSuccess').dataset.phase='confirmed';
   q('checkoutTitle').textContent='Pagamento confirmado';
-  q('orderSuccess').querySelector('.order-eyebrow').textContent='MAHACH · COMPRA CONFIRMADA';
+  q('orderSuccess').querySelector('.order-eyebrow').textContent='ELEXIER · COMPRA CONFIRMADA';
   q('orderHeading').hidden=false;q('orderHeading').textContent='Pagamento aprovado!';
   q('orderReference').hidden=false;
   q('orderInstructions').hidden=false;q('orderInstructions').textContent='Pagamento confirmado pelo Mercado Pago. O pedido segue agora para a loja. Acompanhe o preparo e o envio na página do seu pedido.';

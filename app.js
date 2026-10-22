@@ -130,7 +130,7 @@ function renderBag(){const container=$('#bagItems');if(!container)return;let cou
 }
 async function restoreBag(){try{bag=JSON.parse(localStorage.getItem('mahach-bag')||'{}');if(!bag||Array.isArray(bag)||typeof bag!=='object')bag={};const ids=Object.keys(bag).slice(0,30);await Promise.all(ids.map(async id=>{if(!/^[\w-]{5,80}$/.test(id)||!Number.isInteger(bag[id])||bag[id]<1||bag[id]>20){delete bag[id];return}try{const out=await request('/api/products/'+encodeURIComponent(id));productsById.set(id,out.product)}catch{delete bag[id]}}));storage()}catch{bag={};storage()}}
 async function detail(id,trigger){const requestId=++detailRequestId;let p=productsById.get(id);try{p=(await request('/api/products/'+encodeURIComponent(id))).product;if(requestId!==detailRequestId)return;productsById.set(id,p)}catch(e){if(requestId===detailRequestId)toast(e.message);return}
- $('#productDetail').innerHTML=`<div class="product-detail"><img src="${esc(img(p))}" alt="${p.image?'Foto de '+esc(p.name):'Foto ainda não cadastrada'}"><div class="detail-copy"><div class="eyebrow">${esc(p.brand||'MAHACH')}</div><h2 id="detailTitle">${esc(p.name)}</h2><span class="detail-section-title">Sobre este produto</span><p class="detail-description">${esc(p.description||'Informações complementares em breve.')}</p><p class="price">${money(p.price)}</p><p class="stock-disclaimer">${p.stock===null?'Disponibilidade sujeita a confirmação':p.stock>0?'Estoque informado: '+p.stock:'Sem estoque'}</p><button class="button" data-add="${esc(p.id)}" ${p.stock===0?'disabled':''}>Adicionar à sacola <span>+</span></button><a class="consult-link" href="${esc(wa('Olá, Mahach! Quero saber mais sobre '+p.name+'.'))}" target="_blank" rel="noopener noreferrer">Tirar dúvidas sobre este produto no WhatsApp ↗</a></div></div>`;
+ $('#productDetail').innerHTML=`<div class="product-detail"><img src="${esc(img(p))}" alt="${p.image?'Foto de '+esc(p.name):'Foto ainda não cadastrada'}"><div class="detail-copy"><div class="eyebrow">${esc(p.brand||'MAHACH')}</div><h2 id="detailTitle">${esc(p.name)}</h2><span class="detail-section-title">Sobre este produto</span><p class="detail-description">${esc(p.description||'Informações complementares em breve.')}</p><p class="price">${money(p.price)}</p><p class="stock-disclaimer">${p.stock===null?'Disponibilidade sujeita a confirmação':p.stock>0?'Estoque informado: '+p.stock:'Sem estoque'}</p><button class="button" data-add="${esc(p.id)}" ${p.stock===0?'disabled':''}>Adicionar à sacola <span>+</span></button><a class="consult-link" href="${esc(wa('Olá, Elexier! Quero saber mais sobre '+p.name+'.'))}" target="_blank" rel="noopener noreferrer">Tirar dúvidas sobre este produto no WhatsApp ↗</a></div></div>`;
  openDialog($('#productDialog'),trigger);
  $('#productDialog .product-dialog-header [data-close]')?.focus({preventScroll:true});
 }
@@ -162,7 +162,7 @@ async function init(){try{const out=await request('/api/meta'+($('#products')?'?
  await loadProducts();
  }
  await restoreBag();
- $$('a[href^="https://wa.me/5511995209827"]').forEach(a=>{if(!a.search)a.href=wa('Olá, Mahach! Gostaria de mais informações sobre os produtos e a loja.')});
+ $$('a[href^="https://wa.me/5511995209827"]').forEach(a=>{if(!a.search)a.href=wa('Olá, Elexier! Gostaria de mais informações sobre os produtos e a loja.')});
  if($('#year'))$('#year').textContent=new Date().getFullYear();
 }
 document.addEventListener('click',e=>{

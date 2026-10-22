@@ -268,3 +268,70 @@ body[data-page="catalog"] .site-header .desktop-nav{gap:25px}
 @media(max-width:700px){body[data-page="home"] .elexier-opening{height:auto;min-height:750px;max-height:none}body[data-page="home"] .site-header .brand{font-size:23px;letter-spacing:.27em}body[data-page="home"] .site-header .header-actions{gap:1px}body[data-page="home"] .site-header .header-actions svg{height:21px;width:21px}body[data-page="home"] .elexier-opening-art{inset:0 0 175px 12%;width:88%;height:calc(100% - 175px);opacity:.82}body[data-page="home"] .elexier-opening-art img{object-position:54% 50%}body[data-page="home"] .elexier-opening::after{background:linear-gradient(90deg,#151311ef 0%,#151311e8 30%,#15131163 100%),linear-gradient(0deg,#15131188,transparent 35%)}body[data-page="home"] .elexier-hero-copy{left:7%;top:25%;width:88%}body[data-page="home"] .elexier-hero-copy .hero-eyebrow{font-size:10px}body[data-page="home"] .elexier-hero-copy h1{font-size:clamp(53px,12vw,78px)}body[data-page="home"] .elexier-hero-description{gap:17px;margin-top:25px}body[data-page="home"] .elexier-hero-description i{width:25px}body[data-page="home"] .elexier-hero-description p{font-size:9px;letter-spacing:.15em}body[data-page="home"] .elexier-hero-cta{width:210px;height:51px;padding-inline:21px;margin-top:28px}body[data-page="home"] .elexier-hero-featured{min-height:175px;padding:21px 6%;align-items:flex-start;gap:7px}body[data-page="home"] .elexier-featured-title{min-width:0;font-size:10px;letter-spacing:.12em;gap:9px;align-self:flex-start}body[data-page="home"] .elexier-featured-title span{min-width:23px;width:23px}body[data-page="home"] .elexier-featured-art{position:absolute;left:25%;bottom:5px;width:55%;height:120px}body[data-page="home"] .elexier-featured-link{font-size:9px;letter-spacing:.1em;align-self:flex-start;gap:9px}body[data-page="home"] .elexier-side-index{display:none}body[data-page="home"] .elexier-scroll-arrow{bottom:186px;right:6%;color:#eae1d6;border-color:#eae1d6}body[data-page="home"] .elexier-about{padding-block:65px}.elexier-about-layout{grid-template-columns:1fr;gap:25px}.elexier-about h2{font-size:clamp(43px,10vw,62px)}.elexier-account{display:none}}
 @media(max-width:380px){body[data-page="home"] .site-header .brand{font-size:19px}body[data-page="home"] .elexier-hero-copy h1{font-size:51px}body[data-page="home"] .elexier-opening{min-height:720px}body[data-page="home"] .elexier-hero-copy{top:26%}}
 @media(prefers-reduced-motion:reduce){body[data-page="home"] .elexier-hero-cta{transition:none!important}}
+
+/* ELEXIER V11 — referencia 1536x1024, site navegavel, mobile adaptativo. */
+:root{--elexier-night:#121110;--elexier-cream:#ede6dc;--elexier-stage:#d8cfc2;--elexier-accent:#b8a18a}
+/* A arte de referencia de desktop é completa; as areas de clique continuam sendo HTML acessivel. */
+@media(min-width:981px){
+ body[data-page="home"] .opening.elexier-opening{position:relative;width:100%;height:auto!important;min-height:0!important;max-height:none!important;aspect-ratio:3/2!important;background:#121110 url('/assets/elexier-reference-desktop.webp') center center/100% 100% no-repeat!important;overflow:hidden!important;isolation:isolate}
+ body[data-page="home"] .elexier-opening .elexier-opening-art{display:none!important}
+ body[data-page="home"] .elexier-opening::after{display:none!important}
+ body[data-page="home"] .site-header{position:absolute!important;inset:0 0 auto 0!important;height:9.5vw!important;min-height:0!important;max-height:140px!important;padding:0!important;margin:0!important;display:block!important;z-index:30!important;background:transparent!important;color:transparent!important}
+ body[data-page="home"] .site-header .brand{position:absolute!important;left:6%;top:24%;width:15%;height:37%;display:block!important;font-size:0!important;color:transparent!important;text-shadow:none!important;padding:0!important;overflow:hidden}
+ body[data-page="home"] .site-header .desktop-nav{position:absolute!important;left:24.6%;top:25%;width:34%;height:37%;margin:0!important;display:grid!important;grid-template-columns:repeat(5,1fr)!important;gap:0!important;align-items:stretch!important}
+ body[data-page="home"] .site-header .desktop-nav a{font-size:0!important;line-height:0!important;color:transparent!important;display:block!important;min-height:30px!important;padding:0!important;overflow:hidden}
+ body[data-page="home"] .site-header .desktop-nav a::after{display:none!important}
+ body[data-page="home"] .site-header .header-actions{position:absolute!important;top:23%;right:5.9%;width:12.3%;height:40%;display:flex!important;align-items:stretch!important;justify-content:space-between!important;gap:0!important;opacity:1!important}
+ body[data-page="home"] .site-header .header-actions :is(button,a){flex:0 0 27%!important;min-width:0!important;min-height:0!important;color:transparent!important;background:transparent!important;border:0!important;opacity:1!important}
+ body[data-page="home"] .site-header .header-actions svg{opacity:0!important}
+ body[data-page="home"] .site-header #bagCount{position:absolute!important;right:0!important;top:-13%!important;width:19px;height:19px;background:#131211!important;color:#fff!important;font:11px/19px Arial,sans-serif!important;border-radius:50%!important;display:grid!important;place-items:center!important;opacity:1!important}
+ body[data-page="home"] .elexier-opening .elexier-hero-copy{position:absolute!important;inset:20.7% auto auto 9%!important;width:42%!important;height:39%!important;z-index:5!important;transform:none!important;filter:none!important;will-change:auto!important}
+ body[data-page="home"] .elexier-opening .elexier-hero-copy>:not(.elexier-hero-cta){visibility:hidden!important}
+ body[data-page="home"] .elexier-opening .elexier-hero-cta{position:absolute!important;top:85%!important;left:0!important;width:40%!important;height:14%!important;min-height:35px!important;margin:0!important;padding:0!important;display:block!important;opacity:0!important;cursor:pointer!important;z-index:7!important}
+ body[data-page="home"] .elexier-opening .elexier-hero-cta:focus-visible{opacity:1!important;background:#eee3d4!important;color:#14110e!important;outline:2px solid #fff!important;outline-offset:2px!important;display:flex!important;align-items:center!important;padding:0 12px!important}
+ body[data-page="home"] .elexier-opening .elexier-side-index{position:absolute!important;top:41%;right:3.7%;width:3.4%;height:19%;display:grid!important;grid-template-rows:30px 1fr 30px 30px!important;align-items:center!important;justify-items:center!important;gap:0!important;opacity:0!important;z-index:5!important}
+ body[data-page="home"] .elexier-opening .elexier-side-index a{width:100%;height:100%;display:block;min-width:0;padding:0}
+ body[data-page="home"] .elexier-opening .elexier-side-index span{height:100%}
+ body[data-page="home"] .elexier-opening .elexier-scroll-arrow{position:absolute!important;right:3.6%!important;top:66%!important;bottom:auto!important;width:3%;height:5%;min-width:35px;min-height:35px;opacity:0!important;z-index:5!important}
+ body[data-page="home"] .elexier-opening .elexier-hero-featured{position:absolute!important;left:0!important;bottom:0!important;width:100%;height:19%;min-height:0!important;max-height:none!important;padding:0!important;margin:0!important;background:transparent!important;display:block!important;z-index:6!important}
+ body[data-page="home"] .elexier-opening .elexier-featured-title,body[data-page="home"] .elexier-opening .elexier-featured-art{display:none!important}
+ body[data-page="home"] .elexier-opening .elexier-featured-link{position:absolute!important;right:3.5%;bottom:26%;display:block!important;width:11%;height:25%;min-height:20px!important;opacity:0!important}
+ body[data-page="home"] .elexier-opening .elexier-featured-link:focus-visible{opacity:1!important;background:#28201cc9!important;color:#fff!important;padding:10px!important;outline:2px solid #2c2016}
+ body[data-page="home"] .elexier-opening a:focus-visible{outline:2px solid #e9d1b2!important;outline-offset:1px!important}
+}
+/* Mobile / compactas: controles reais, foto separada, sem texto da imagem duplicado. */
+@media(max-width:980px){
+ body[data-page="home"] .site-header{background:linear-gradient(180deg,#0e0d0c94,transparent)!important}
+ body[data-page="home"] .elexier-opening{background:radial-gradient(circle at 65% 43%,#6f5e50,#0b0b0b 75%)!important}
+ body[data-page="home"] .elexier-opening-art{display:block!important}
+ body[data-page="home"] .elexier-opening .elexier-hero-copy>:not(.elexier-hero-cta){visibility:visible!important}
+ body[data-page="home"] .elexier-opening .elexier-hero-cta{opacity:1!important}
+}
+/* Catálogos e paginas institucionais recebem identidade escura da referencia;
+   componentes de produtos, busca, frete e carrinho preservam seus seletores e JS. */
+body[data-page="catalog"]{background:#e9e3db!important;color:#231e1a}
+body[data-page="catalog"] .site-header{background:#161413!important;color:#f1e9dd!important;z-index:20!important;min-height:100px}
+body[data-page="catalog"] .site-header .brand{color:#eee4d9!important;font:400 clamp(22px,2.1vw,32px)/1 Georgia,serif!important;letter-spacing:.31em!important}
+body[data-page="catalog"] .site-header .desktop-nav a{font:600 11px/1.5 Arial,sans-serif!important;letter-spacing:.17em!important;text-transform:uppercase!important;color:#e8d9c8!important}
+body[data-page="catalog"] .shop-banner{min-height:390px!important;background:linear-gradient(105deg,#11100f 7%,#28201b 48%,#776657 115%)!important;color:#f6ebdf!important}
+body[data-page="catalog"] .shop-banner-art{display:none!important}
+body[data-page="catalog"] .shop-banner::after{background:linear-gradient(125deg,#13110dbf 0%,#241c1766 60%,transparent)!important}
+body[data-page="catalog"] .shop-banner h1{font:400 clamp(42px,5.4vw,82px)/1.1 Georgia,serif!important;letter-spacing:-.05em!important;color:#f5eee3!important}
+body[data-page="catalog"] .shop-banner :is(p,a){color:#ded2c4!important}
+body[data-page="catalog"] .product-photo{background:#e2d8cb!important}
+body[data-page="catalog"] .product-grid .product-card{animation-duration:.3s}
+body[data-page="catalog"] .product-link{border-bottom-color:#b7a38c}
+body[data-page="home"] .collection-strip,body[data-page="home"] .statement,body[data-page="home"] .closing,body[data-page="home"] .elexier-about{color:#241d17;background:#e8e0d6!important}
+body[data-page="home"] .statement{border-top-color:#cbbdaf!important}
+body[data-page="home"] .statement-photo img{filter:contrast(1.1) saturate(.8)}
+body[data-page="home"] .closing-art{object-fit:contain;max-width:47%;height:65%}
+body[data-page="home"] .closing h2{max-width:64%;font-size:clamp(55px,7vw,110px)!important}
+body[data-page="home"] .elexier-about{padding-block:100px}
+body :is(.menu-brand,.footer-logo){letter-spacing:.24em!important}
+footer{background:#141210!important;color:#eee3d4!important;border-color:#352d26!important}
+footer .footer-label,footer .footer-links a,footer .company-details,footer .footer-bottom,footer a{color:#d9c9b6!important}
+footer .company-details,footer .footer-bottom{border-color:#4b4138!important}
+footer .footer-bottom{color:#c1ae99!important}
+footer a:hover{color:#fff!important}
+@media(max-width:980px){body[data-page="catalog"] .site-header{min-height:80px}body[data-page="home"] .closing h2{max-width:100%}}
+@media(prefers-reduced-motion:reduce){body[data-page="home"] .elexier-opening *{animation:none!important;transition:none!important}html{scroll-behavior:auto!important}}
