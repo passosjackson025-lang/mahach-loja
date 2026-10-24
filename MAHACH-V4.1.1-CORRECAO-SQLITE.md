@@ -1,4 +1,4 @@
-# MAHACH V4.1.1 — Correção de colisão SQLite nos testes
+# LA COUR V4.1.1 — Correção de colisão SQLite nos testes
 
 ## Erro corrigido
 `Error: UNIQUE constraint failed: products.id` quando `npm test` executava pela primeira vez após extrair uma versão nova.

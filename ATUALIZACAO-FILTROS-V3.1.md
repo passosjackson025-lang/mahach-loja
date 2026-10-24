@@ -1,4 +1,4 @@
-# MAHACH — Atualização de filtros V3.1
+# LA COUR — Atualização de filtros V3.1
 
 Esta alteração é **exclusiva da interface de categorias e marcas** da versão V3, com retirada do filtro público de famílias olfativas. Não altera checkout, pedidos, integração de ERP ou banco de dados.
 

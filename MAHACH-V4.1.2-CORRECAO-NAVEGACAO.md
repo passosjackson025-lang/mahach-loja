@@ -1,4 +1,4 @@
-# MAHACH V4.1.2 — correção do salto da página e do “NaN”
+# LA COUR V4.1.2 — correção do salto da página e do “NaN”
 
 ## Por que a V4.1.1 falhava
 

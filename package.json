@@ -1,8 +1,8 @@
 {
-  "name": "mahach-site-corrigido-postgres",
+  "name": "la-cour-perfumaria",
   "private": true,
   "version": "5.2.1-pg-admin-v2",
-  "description": "MAHACH - site principal com PostgreSQL e painel (validacao de integracoes pendente)",
+  "description": "LA COUR — Perfumaria, site principal com PostgreSQL e painel (validacao de integracoes pendente)",
   "engines": {
     "node": ">=22.13.0"
   },

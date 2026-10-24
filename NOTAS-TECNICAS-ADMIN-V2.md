@@ -1,4 +1,4 @@
-# MAHACH — Correção do painel PostgreSQL V2
+# LA COUR — Correção do painel PostgreSQL V2
 
 **Pacote de atualização para a pasta MAHACH_SITE_POSTGRES_TESTE; NÃO para a versão SQLite original.**
 
@@ -22,7 +22,7 @@ Na prévia PostgreSQL, todas as rotas POST/PUT/DELETE do painel, incluindo `/api
 4. No Git Bash, entre na pasta de teste: `cd "/c/Users/jackson.silva/Downloads/MAHACH_SITE_POSTGRES_TESTE"`.
 5. Rode: `node scripts/test-offline.cjs`, `node scripts/test-admin-photo.cjs`, `node scripts/test-cloud-storage.cjs`. Esses testes usam **PostgreSQL simulado** e não alteram o Neon. Esperado: `OFFLINE OK`, `ADMIN OK (SIMULADO)` e `CLOUDINARY OK (SIMULADO)`.
 6. **Atenção:** ao habilitar gravações no próximo passo, editar pelo painel vai ALTERAR DE VERDADE os registros do schema `mahach_stage` no Neon ligado à sua `DATABASE_URL`. Recomendamos criar uma branch separada no Neon antes de experimentar. O backup SQLite verificado é uma proteção, mas não é um backup automático de futuras alterações no Neon.
-7. Mantenha o Git Bash com a `DATABASE_URL` do projeto MAHACH de Virginia configurada, **sem compartilhar a URL com ninguém**. Confira `npm run neon:check` antes de escrever.
+7. Mantenha o Git Bash com a `DATABASE_URL` do projeto LA COUR de Virginia configurada, **sem compartilhar a URL com ninguém**. Confira `npm run neon:check` antes de escrever.
 8. Para iniciar **somente no computador**, com gravações liberadas no processo:
 
    `MAHACH_ENABLE_ADMIN_WRITES=true npm start`

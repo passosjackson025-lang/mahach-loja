@@ -1,0 +1,26 @@
+[
+  {
+    "asset": "assets/featured-asad.webp",
+    "source": "https://www.lattafa-usa.com/products/asad",
+    "image_url": "https://cdn.shopify.com/s/files/1/0754/4936/8799/files/Asad-1_ceed76c7-7a80-46b3-b372-68cc309137f4.png?v=1747421311",
+    "title": "Asad"
+  },
+  {
+    "asset": "assets/featured-khamrah.webp",
+    "source": "https://www.lattafa-usa.com/products/khamrah",
+    "image_url": "https://cdn.shopify.com/s/files/1/0754/4936/8799/files/Khamrah-1_0ffa4f52-30e3-4dea-9399-9bae4b8cb4af.png?v=1747421472",
+    "title": "Khamrah"
+  },
+  {
+    "asset": "assets/featured-oud.webp",
+    "source": "https://www.lattafa-usa.com/products/badee-al-oud-glory",
+    "image_url": "https://cdn.shopify.com/s/files/1/0754/4936/8799/files/1_5a4baf04-76ee-43c9-9751-4ac43d7aba74.png?v=1747556003",
+    "title": "Badee Al Oud Glory"
+  },
+  {
+    "asset": "assets/featured-fakhar.webp",
+    "source": "https://www.lattafa-usa.com/products/fakhar-men",
+    "image_url": "https://cdn.shopify.com/s/files/1/0754/4936/8799/files/1_aa0a5a38-775b-4814-a909-837c1d360d9c.png?v=1747500778",
+    "title": "Fakhar Black"
+  }
+]

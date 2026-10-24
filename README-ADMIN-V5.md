@@ -1,4 +1,4 @@
-# MAHACH V5 — Operação do painel
+# LA COUR V5 — Operação do painel
 
 ## Instalação sem perder dados
 

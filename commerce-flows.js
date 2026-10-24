@@ -11,12 +11,12 @@ async function createPreference(conf,order,items,token){
  const back=origin+'/finalizado.html?reference='+encodeURIComponent(order.id);
  const lineItems=items.map(i=>({id:i.id,title:i.name.slice(0,100),quantity:i.qty,unit_price:Number(i.unit_price),currency_id:'BRL'}));
  if(order.shipping_cost>0)lineItems.push({id:'frete',title:'Frete via transportadora',quantity:1,unit_price:Number(order.shipping_cost),currency_id:'BRL'});
- const body={items:lineItems,external_reference:order.id,payer:{name:order.customer_name,email:order.customer_email},back_urls:{success:back,pending:back,failure:back},auto_return:'approved',notification_url:origin+'/api/payments/mercadopago/webhook',statement_descriptor:'MAHACH',payment_methods:{excluded_payment_types:(order.payment==='pix'?['credit_card','debit_card','ticket','prepaid_card']:['bank_transfer','ticket','atm','prepaid_card','debit_card']).map(id=>({id}))}};
+ const body={items:lineItems,external_reference:order.id,payer:{name:order.customer_name,email:order.customer_email},back_urls:{success:back,pending:back,failure:back},auto_return:'approved',notification_url:origin+'/api/payments/mercadopago/webhook',statement_descriptor:'LA COUR',payment_methods:{excluded_payment_types:(order.payment==='pix'?['credit_card','debit_card','ticket','prepaid_card']:['bank_transfer','ticket','atm','prepaid_card','debit_card']).map(id=>({id}))}};
  const res=await fetch(MP+'/checkout/preferences',{method:'POST',headers:{Authorization:'Bearer '+conf('MERCADO_PAGO_ACCESS_TOKEN'),'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(18000)});
  const response=await res.json().catch(()=>({}));if(!res.ok||!/^https:\/\//.test(response.init_point||''))throw Object.assign(new Error('Mercado Pago não conseguiu iniciar o checkout (HTTP '+res.status+').'),{status:502});
  return {preferenceId:String(response.id||''),checkoutUrl:response.init_point};
 }
-// Dados usados somente na chamada ao Mercado Pago; nao persistimos CPF na MAHACH.
+// Dados usados somente na chamada ao Mercado Pago; nao persistimos CPF na LA COUR.
 function validCPF(value){
  const digits=String(value??'').replace(/\D/g,'');
  if(!/^\d{11}$/.test(digits)||/^(\d)\1{10}$/.test(digits))return false;
@@ -37,11 +37,12 @@ async function createPixPayment(conf,order,cpf){
  if(!validCPF(cpf))throw Object.assign(new Error('Confira o CPF para gerar o Pix.'),{status:400});
  const amount=cents(Number(order.subtotal)+Number(order.shipping_cost||0))/100;
  if(!(amount>=0.01&&amount<=1000000))throw Object.assign(new Error('Valor do pagamento invalido.'),{status:400});
- const body={transaction_amount:amount,description:'Pedido '+order.id+' - MAHACH',
+ const body={transaction_amount:amount,description:'Pedido '+order.id+' - LA COUR',
   payment_method_id:'pix',external_reference:order.id,
   notification_url:httpsSite(conf('PUBLIC_SITE_URL'))+'/api/payments/mercadopago/webhook',
   payer:{email:order.customer_email,first_name:String(order.customer_name||'').split(/\s+/)[0],identification:{type:'CPF',number:String(cpf).replace(/\D/g,'')}}};
  // Mesma chave em cada tentativa do MESMO pedido: um pedido nunca gera 2 Pix.
+ // Protocol identifier is retained so existing orders retry without duplicate payments.
  const key=crypto.createHash('sha256').update('MAHACH-PIX:'+order.id).digest('hex');
  const res=await fetch(MP+'/v1/payments',{method:'POST',headers:{
   Authorization:'Bearer '+conf('MERCADO_PAGO_ACCESS_TOKEN'),

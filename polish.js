@@ -1,5 +1,5 @@
 'use strict';
-/* Editorial MAHACH: progressive enhancement, native scroll, no layout shift. */
+/* Editorial LA COUR: progressive enhancement, native scroll, no layout shift. */
 (()=>{
  const header=document.querySelector('.site-header');
  let raf=0;

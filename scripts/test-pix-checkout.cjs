@@ -23,6 +23,7 @@ global.fetch=async(url,opts)=>{
   assert.equal(requests.length,2);
   assert.equal(requests[0].url,'https://api.mercadopago.com/v1/payments');
   assert.equal(requests[0].headers['X-Idempotency-Key'],requests[1].headers['X-Idempotency-Key'],'retry deve ser idempotente');
+  assert.equal(requests[0].headers['X-Idempotency-Key'],crypto.createHash('sha256').update('MAHACH-PIX:'+o.id).digest('hex'),'pedidos anteriores mantêm a mesma chave após a mudança de marca');
   assert.equal(requests[0].body.transaction_amount,110.71);
   assert.equal(requests[0].body.payment_method_id,'pix');
   assert.equal(requests[0].body.payer.identification.type,'CPF');

@@ -1,4 +1,4 @@
-# MAHACH — Atualização da pasta PRINCIPAL / Preparação Render
+# LA COUR — Atualização da pasta PRINCIPAL / Preparação Render
 
 Esta atualização modifica SOMENTE os arquivos que aparecem no ZIP, dentro da sua pasta atual `MAHACH_SITE_PRINCIPAL_CORRIGIDO_POSTGRES_V2`.
 
@@ -25,7 +25,7 @@ npm run test:admin
 npm run test:fotos
 ```
 
-Os testes rodam localmente e não importam novamente o banco. Para inspecionar seu Neon (sem gravar), carregue `DATABASE_URL` do projeto **MAHACH — AWS US East 1 (N. Virginia)** no mesmo terminal e execute:
+Os testes rodam localmente e não importam novamente o banco. Para inspecionar seu Neon (sem gravar), carregue `DATABASE_URL` do projeto **LA COUR — AWS US East 1 (N. Virginia)** no mesmo terminal e execute:
 
 ```bash
 npm run publicacao:check

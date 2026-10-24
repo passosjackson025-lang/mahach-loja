@@ -7,7 +7,25 @@ const emptyImage='/assets/produto-sem-foto.svg';
 let categories=[],brands=[],bag={},page=1,search='',category='todos',brand='',sort='featured',currentPage=[],productsById=new Map(),total=0,dialogTriggers=new WeakMap(),dialogScrollY=new WeakMap(),toastTimeout;
 const catalogParams=new URLSearchParams(location.search);
 const current=catalogParams.get('categoria')||(catalogParams.has('q')?'todos':document.body.dataset.category||'todos');
-function img(p){return p.image||emptyImage}
+const featuredImages={
+ '6a90e97b833a9316a807092e':'/assets/featured-asad.webp',
+ '6a90ec29409abe2003085f0d':'/assets/featured-khamrah.webp',
+ '6a911139d4441a8ea109f905':'/assets/featured-oud.webp',
+ '6a90eaa593942f9d8b03a044':'/assets/featured-fakhar.webp'
+};
+function img(p){return p.image||featuredImages[p.id]||emptyImage}
+window.laCourProductImage=img;
+async function loadFeatured(){
+ await Promise.all($$('[data-featured-product]').map(async card=>{
+  try{
+   const p=(await request('/api/products/'+encodeURIComponent(card.dataset.featuredProduct))).product;
+   productsById.set(p.id,p);
+   const photo=card.querySelector('img');photo.src=img(p);photo.alt='Foto de '+p.name;
+   const price=card.querySelector('[data-featured-price]');price.textContent=p.stock===0?'Sem estoque':money(p.price);
+   card.querySelector('.featured-notes').textContent=p.stock===0?'Consulte outras fragrâncias':card.querySelector('.featured-notes').textContent;
+  }catch{card.querySelector('[data-featured-price]').textContent='Consulte disponibilidade'}
+ }));
+}
 function wa(text){return 'https://wa.me/5511995209827?text='+encodeURIComponent(text)}
 function toast(message){const el=$('.toast');if(!el)return;el.textContent=message;el.hidden=false;el.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>{el.classList.remove('show');el.hidden=true},5000)}
 async function request(url,options){const r=await fetch(url,options);const o=await r.json();if(!r.ok)throw Error(o.error||'Não foi possível concluir');return o}
@@ -29,7 +47,7 @@ function renderCategories(){
   $('#catalogSubtitle').textContent=selected?.subtitle||'Encontre o seu próximo ritual.';
   $('#breadcrumbCategory').textContent=selected?name:'';
   $$('.category-crumb').forEach(x=>x.hidden=!selected);
-  document.title=name+' — MAHACH';
+  document.title=name+' — LA COUR';
  }
 }
 let brandExpanded=false,catalogRequestId=0,metaRequestId=0,detailRequestId=0,searchTimer;
@@ -115,7 +133,7 @@ async function loadProducts({preserveY}={}){const grid=$('#products');if(!grid)r
  const requestId=++catalogRequestId;grid.classList.add('catalog-changing');
  const qs=new URLSearchParams({page:String(page),limit:'24',category,q:search,brand,sort});
  try{const out=await request('/api/products?'+qs);if(requestId!==catalogRequestId)return;total=out.total;currentPage=out.products;for(const p of currentPage)productsById.set(p.id,p);
- grid.innerHTML=out.products.map(p=>`<article class="product-card"><div class="product-photo"><button data-detail="${esc(p.id)}" class="detail-open" aria-label="Conhecer ${esc(p.name)}"><img src="${esc(img(p))}" alt="${p.image?'Foto do produto '+esc(p.name):'Foto indisponível'}" width="800" height="1000" loading="lazy"></button></div><div class="product-info"><h3><button data-detail="${esc(p.id)}">${esc(p.name)}</button></h3><p>${esc(p.brand||'MAHACH')}</p><span class="price">${money(p.price)}</span><button class="product-link" data-detail="${esc(p.id)}">Conhecer ${arrow}</button></div></article>`).join('');
+ grid.innerHTML=out.products.map(p=>`<article class="product-card"><div class="product-photo"><button data-detail="${esc(p.id)}" class="detail-open" aria-label="Conhecer ${esc(p.name)}"><img src="${esc(img(p))}" alt="${img(p)!==emptyImage?'Foto do produto '+esc(p.name):'Foto indisponível'}" width="800" height="1000" loading="lazy"></button></div><div class="product-info"><h3><button data-detail="${esc(p.id)}">${esc(p.name)}</button></h3><p>${esc(p.brand||'LA COUR')}</p><span class="price">${money(p.price)}</span><button class="product-link" data-detail="${esc(p.id)}">Conhecer ${arrow}</button></div></article>`).join('');
  window.mahachRevealCards?.(grid);
  $('#resultCount').textContent=`${Number(total).toLocaleString('pt-BR')} ${total===1?'produto':'produtos'} · página ${page} de ${Math.max(1,Math.ceil(total/24))}`;
  $('#emptySearch').hidden=!!out.products.length;$('#activeFilters').textContent=[brand&&'Marca: '+cleanLabel(brand)].filter(Boolean).join(' · ');
@@ -130,7 +148,7 @@ function renderBag(){const container=$('#bagItems');if(!container)return;let cou
 }
 async function restoreBag(){try{bag=JSON.parse(localStorage.getItem('mahach-bag')||'{}');if(!bag||Array.isArray(bag)||typeof bag!=='object')bag={};const ids=Object.keys(bag).slice(0,30);await Promise.all(ids.map(async id=>{if(!/^[\w-]{5,80}$/.test(id)||!Number.isInteger(bag[id])||bag[id]<1||bag[id]>20){delete bag[id];return}try{const out=await request('/api/products/'+encodeURIComponent(id));productsById.set(id,out.product)}catch{delete bag[id]}}));storage()}catch{bag={};storage()}}
 async function detail(id,trigger){const requestId=++detailRequestId;let p=productsById.get(id);try{p=(await request('/api/products/'+encodeURIComponent(id))).product;if(requestId!==detailRequestId)return;productsById.set(id,p)}catch(e){if(requestId===detailRequestId)toast(e.message);return}
- $('#productDetail').innerHTML=`<div class="product-detail"><img src="${esc(img(p))}" alt="${p.image?'Foto de '+esc(p.name):'Foto ainda não cadastrada'}"><div class="detail-copy"><div class="eyebrow">${esc(p.brand||'MAHACH')}</div><h2 id="detailTitle">${esc(p.name)}</h2><span class="detail-section-title">Sobre este produto</span><p class="detail-description">${esc(p.description||'Informações complementares em breve.')}</p><p class="price">${money(p.price)}</p><p class="stock-disclaimer">${p.stock===null?'Disponibilidade sujeita a confirmação':p.stock>0?'Estoque informado: '+p.stock:'Sem estoque'}</p><button class="button" data-add="${esc(p.id)}" ${p.stock===0?'disabled':''}>Adicionar à sacola <span>+</span></button><a class="consult-link" href="${esc(wa('Olá, Elexier! Quero saber mais sobre '+p.name+'.'))}" target="_blank" rel="noopener noreferrer">Tirar dúvidas sobre este produto no WhatsApp ↗</a></div></div>`;
+ $('#productDetail').innerHTML=`<div class="product-detail"><img src="${esc(img(p))}" alt="${img(p)!==emptyImage?'Foto de '+esc(p.name):'Foto ainda não cadastrada'}"><div class="detail-copy"><div class="eyebrow">${esc(p.brand||'LA COUR')}</div><h2 id="detailTitle">${esc(p.name)}</h2><span class="detail-section-title">Sobre este produto</span><p class="detail-description">${esc(p.description||'Informações complementares em breve.')}</p><p class="price">${money(p.price)}</p><p class="stock-disclaimer">${p.stock===null?'Disponibilidade sujeita a confirmação':p.stock>0?'Estoque informado: '+p.stock:'Sem estoque'}</p><button class="button" data-add="${esc(p.id)}" ${p.stock===0?'disabled':''}>Adicionar à sacola <span>+</span></button><a class="consult-link" href="${esc(wa('Olá, LA COUR! Quero saber mais sobre '+p.name+'.'))}" target="_blank" rel="noopener noreferrer">Tirar dúvidas sobre este produto no WhatsApp ↗</a></div></div>`;
  openDialog($('#productDialog'),trigger);
  $('#productDialog .product-dialog-header [data-close]')?.focus({preventScroll:true});
 }
@@ -160,18 +178,19 @@ async function init(){try{const out=await request('/api/meta'+($('#products')?'?
  $('#openFilters').onclick=e=>openDialog($('#filterDialog'),e.currentTarget);
  if(location.hash==='#busca')searchInput.focus();
  await loadProducts();
- // Link direto aos produtos da faixa ELEXIER; usa o modal ja existente.
+ // Link direto aos produtos da faixa LA COUR; usa o modal ja existente.
  const featuredId=catalogParams.get('produto');
  if(featuredId&&/^[a-f0-9]{24}$/.test(featuredId))await detail(featuredId,$('#catalogTitle')||$('#products'));
  }
+ await loadFeatured();
  await restoreBag();
- $$('a[href^="https://wa.me/5511995209827"]').forEach(a=>{if(!a.search)a.href=wa('Olá, Elexier! Gostaria de mais informações sobre os produtos e a loja.')});
+ $$('a[href^="https://wa.me/5511995209827"]').forEach(a=>{if(!a.search)a.href=wa('Olá, LA COUR! Gostaria de mais informações sobre os produtos e a loja.')});
  if($('#year'))$('#year').textContent=new Date().getFullYear();
 }
 document.addEventListener('click',e=>{
  const categoryLink=e.target.closest('a[data-catalog-category]');
  if(categoryLink&&$('#products')){e.preventDefault();changeCategory(categoryLink.dataset.catalogCategory);return}
- const d=e.target.closest('[data-detail]');if(d)return detail(d.dataset.detail,d);
+ const d=e.target.closest('[data-detail]');if(d){e.preventDefault();return detail(d.dataset.detail,d)}
  const a=e.target.closest('[data-add]');if(a)return add(a.dataset.add);
  const q=e.target.closest('[data-qty]');if(q){const id=q.dataset.qty;bag[id]=(bag[id]||0)+Number(q.dataset.step);if(bag[id]<=0)delete bag[id];storage();return}
  const r=e.target.closest('[data-remove]');if(r){delete bag[r.dataset.remove];storage();return}

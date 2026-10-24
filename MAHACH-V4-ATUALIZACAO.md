@@ -1,4 +1,4 @@
-# MAHACH V4 — Polimento visual e revisão técnica
+# LA COUR V4 — Polimento visual e revisão técnica
 
 ## Escopo: preservar layout da V3.1
 

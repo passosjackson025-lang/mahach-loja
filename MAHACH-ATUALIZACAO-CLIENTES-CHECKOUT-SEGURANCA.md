@@ -1,4 +1,4 @@
-# MAHACH — Atualização de checkout, clientes e segurança
+# LA COUR — Atualização de checkout, clientes e segurança
 
 ## O que foi implementado nesta cópia
 

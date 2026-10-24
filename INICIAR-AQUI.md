@@ -1,8 +1,8 @@
-# MAHACH V5: painel, fotos e configurações persistentes
+# LA COUR V5: painel, fotos e configurações persistentes
 
 **Atualização principal:** leia primeiro `README-ADMIN-V5.md`. O painel tem upload manual de fotos, criação/edição de produtos, categorias, estatísticas e configurações de integração salvas no banco. Bling e Mercado Pago não processam operações reais sem integração posterior e autorização.
 
-# MAHACH V3 — Atualização do site e revisão do catálogo
+# LA COUR V3 — Atualização do site e revisão do catálogo
 
 ## 1. Instalação sem perder seu administrador/pedidos
 

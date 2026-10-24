@@ -17,7 +17,7 @@ function sqlize(sql) {
  let s=String(sql).replace(/\bINSERT\s+OR\s+IGNORE\s+INTO\b/gi,'INSERT INTO');
  const ignore=/\bINSERT\s+OR\s+IGNORE\s+INTO\b/i.test(sql);
  s=s.replace(objRe,(_,verb,table)=>verb+' mahach_stage."'+table.toLowerCase()+'"');
- // O código MAHACH só utiliza '?' como marcador de parâmetro SQL.
+ // O código LA COUR só utiliza '?' como marcador de parâmetro SQL.
  let n=0;s=s.replace(/\?/g,()=>'\u0024'+(++n));
  if(ignore)s+=' ON CONFLICT DO NOTHING';
  s=s.replace(/\bCOLLATE\s+NOCASE\b/gi,'');

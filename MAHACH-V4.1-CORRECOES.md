@@ -1,6 +1,6 @@
-# MAHACH V4.1 — Correção da navegação e da busca
+# LA COUR V4.1 — Correção da navegação e da busca
 
-Atualização incremental da MAHACH V4. **Não altera o esquema do banco, credenciais, pedidos ou painel.**
+Atualização incremental da LA COUR V4. **Não altera o esquema do banco, credenciais, pedidos ou painel.**
 
 ## Ajustes implementados
 
@@ -12,7 +12,7 @@ Atualização incremental da MAHACH V4. **Não altera o esquema do banco, creden
 
 ## Instalação recomendada (PATCH)
 
-1. Feche o servidor MAHACH com `Ctrl+C`.
+1. Feche o servidor LA COUR com `Ctrl+C`.
 2. Faça backup da pasta do projeto, especialmente `private/mahach.sqlite` e `.env`.
 3. Extraia o `MAHACH_PATCH_CORRECOES_V4_1.zip` **por cima da pasta do projeto V4**, preservando a estrutura de diretórios e substituindo apenas os arquivos do ZIP.
 4. Execute `npm test` no terminal do projeto; depois `npm start`.

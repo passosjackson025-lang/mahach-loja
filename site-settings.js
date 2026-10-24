@@ -20,7 +20,7 @@ const FIELDS=Object.freeze({
  MERCADO_PAGO_WEBHOOK_SECRET:{label:'Assinatura secreta do Webhook Mercado Pago',kind:'secret',section:'mercado-pago'},
  PUBLIC_SITE_URL:{label:'URL pública HTTPS do site (para retorno e webhook)',kind:'url',section:'mercado-pago'},
  RESEND_API_KEY:{label:'API Key Resend para e-mails transacionais',kind:'secret',section:'email'},
- MAIL_FROM:{label:'Remetente verificado (ex: MAHACH <pedidos@dominio.com>)',kind:'text',section:'email',max:200},
+ MAIL_FROM:{label:'Remetente verificado (ex: LA COUR <pedidos@dominio.com>)',kind:'text',section:'email',max:200},
  ADMIN_EMAIL:{label:'E-mail que recebe avisos de vendas aprovadas',kind:'email',section:'email'},
 });
 function init(db){db.exec(`CREATE TABLE IF NOT EXISTS site_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL,encrypted INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);`);}

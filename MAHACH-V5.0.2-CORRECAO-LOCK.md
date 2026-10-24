@@ -1,4 +1,4 @@
-# MAHACH V5.0.2 — Correção SQLite `database is locked`
+# LA COUR V5.0.2 — Correção SQLite `database is locked`
 
 ## Problema diagnosticado no Windows / Node 24
 

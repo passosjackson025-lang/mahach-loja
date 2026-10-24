@@ -1,5 +1,5 @@
 'use strict';
-/* MAHACH PostgreSQL (staging). Não substitua a versão SQLite original. */
+/* LA COUR PostgreSQL (staging). Não substitua a versão SQLite original. */
 const http=require('node:http');
 const fs=require('node:fs');
 const path=require('node:path');
@@ -23,7 +23,7 @@ function normalizeCatalogQuery(value){return String(value??'').normalize('NFD').
 const conf=(name)=>settings.get(name);
 function quickDeliveryWhatsapp(o){
  const items=JSON.parse(o.items_json).map(x=>x.qty+'x '+x.name).join(', ');
- const text=`Olá, MAHACH! Já efetuei o pagamento dos produtos do pedido ${o.id} e gostaria de combinar somente a corrida por ${o.delivery==='uber'?'Uber':'99'}.\nNome: ${o.customer_name}\nEndereço: ${o.address} – CEP ${o.cep}\nItens: ${items}\nValor dos produtos: R$ ${Number(o.subtotal).toFixed(2).replace('.',',')} (pagamento confirmado).\nQual será o valor e como vamos organizar a entrega?`;
+ const text=`Olá, LA COUR! Já efetuei o pagamento dos produtos do pedido ${o.id} e gostaria de combinar somente a corrida por ${o.delivery==='uber'?'Uber':'99'}.\nNome: ${o.customer_name}\nEndereço: ${o.address} – CEP ${o.cep}\nItens: ${items}\nValor dos produtos: R$ ${Number(o.subtotal).toFixed(2).replace('.',',')} (pagamento confirmado).\nQual será o valor e como vamos organizar a entrega?`;
  return 'https://wa.me/'+(conf('WHATSAPP')||DEFAULT_WHATSAPP)+'?text='+encodeURIComponent(text);
 }
 function searchText(p){return `${p.name||''} ${p.brand||''} ${p.family||''} ${p.description||''}`.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().slice(0,14000)}
@@ -74,7 +74,7 @@ function security(res){
  const csp="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; font-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"+(process.env.NODE_ENV==='production'?'; upgrade-insecure-requests':'');
  res.setHeader('Content-Security-Policy',csp);res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');res.setHeader('X-Permitted-Cross-Domain-Policies','none');res.setHeader('Origin-Agent-Cluster','?1');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');res.setHeader('Cross-Origin-Resource-Policy','same-origin');res.setHeader('Cross-Origin-Opener-Policy','same-origin');if(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
 }
-async function vendizapFetch(endpoint){const id=conf('VENDIZAP_ID'),secret=conf('VENDIZAP_SECRET');if(!id||!secret)throw Object.assign(new Error('Integração Vendizap não configurada'),{status:503});const res=await fetch('https://app.vendizap.com/api/'+endpoint,{headers:{'X-Auth-Id':id,'X-Auth-Secret':secret,'User-Agent':'MahachLoja/2.0','Accept':'application/json'},signal:AbortSignal.timeout(12000)});if(!res.ok)throw Object.assign(new Error('Vendizap respondeu '+res.status),{status:502});return res.json()}
+async function vendizapFetch(endpoint){const id=conf('VENDIZAP_ID'),secret=conf('VENDIZAP_SECRET');if(!id||!secret)throw Object.assign(new Error('Integração Vendizap não configurada'),{status:503});const res=await fetch('https://app.vendizap.com/api/'+endpoint,{headers:{'X-Auth-Id':id,'X-Auth-Secret':secret,'User-Agent':'LaCourLoja/2.0','Accept':'application/json'},signal:AbortSignal.timeout(12000)});if(!res.ok)throw Object.assign(new Error('Vendizap respondeu '+res.status),{status:502});return res.json()}
 async function syncVendizap(){let updates=0,images=0;
  const update=db.prepare('UPDATE products SET name=?,price=?,description=?,image=?,search_text=? WHERE id=?');
  const insert=db.prepare('INSERT OR IGNORE INTO products(id,name,price,description,category,brand,family,image,sku,active,search_text) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
@@ -109,7 +109,7 @@ async function shippingQuote(payload){
  if(items.some(({p})=>![p.width,p.height,p.length,p.weight].every(n=>Number.isFinite(Number(n))&&Number(n)>0)))throw Object.assign(new Error('Para calcular frete, cadastre peso e dimensoes de todos os produtos da sacola.'),{status:422});
  const products=items.map(({p,qty})=>({id:p.id,width:Number(p.width),height:Number(p.height),length:Number(p.length),weight:Number(p.weight),insurance_value:p.price,quantity:qty}));
  const api=conf('MELHOR_ENVIO_SANDBOX')==='true'?'https://sandbox.melhorenvio.com.br':'https://melhorenvio.com.br';
- const r=await fetch(api+'/api/v2/me/shipment/calculate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Accept':'application/json','User-Agent':'MAHACH ('+(conf('SHIPPING_CONTACT_EMAIL')||'suporte@mahach.com.br')+')'},body:JSON.stringify({from:{postal_code:origin},to:{postal_code:cep},products}),signal:AbortSignal.timeout(15000)});
+ const r=await fetch(api+'/api/v2/me/shipment/calculate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Accept':'application/json','User-Agent':'LA COUR ('+(conf('SHIPPING_CONTACT_EMAIL')||'cooper.machha@gmail.com')+')'},body:JSON.stringify({from:{postal_code:origin},to:{postal_code:cep},products}),signal:AbortSignal.timeout(15000)});
  if(!r.ok){
   // Nao gravar respostas de provedor nem tokens nos logs.
   const reason=r.status===401||r.status===403?'Melhor Envio recusou o acesso: confira se o token pertence ao ambiente selecionado (sandbox ou producao).':r.status===422?'Melhor Envio recusou os dados do frete: confira CEP, peso e dimensoes.':'Melhor Envio indisponivel neste momento (HTTP '+r.status+').';
@@ -124,7 +124,7 @@ async function shippingQuote(payload){
  if(!perfumeRates.length){
   // Sem CEP, destinatario, valores ou credenciais nos logs.
   const names=[...new Set(validRates.map(x=>String(x.company?.name||'').replace(/[^a-zA-Z0-9 .&-]/g,'').slice(0,40)))].filter(Boolean).slice(0,12);
-  console.info('[Frete MAHACH] cotacoes_recebidas='+allRates.length+' validas='+validRates.length+' adequadas_para_perfume=0 transportadoras='+names.join('|').slice(0,280));
+  console.info('[Frete LA COUR] cotacoes_recebidas='+allRates.length+' validas='+validRates.length+' adequadas_para_perfume=0 transportadoras='+names.join('|').slice(0,280));
  }
  return perfumeRates
   .map(x=>({service:String(x.name||'Entrega'),carrier:/^jet$/i.test(String(x.company?.name||''))?'J&T Express':String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
@@ -152,17 +152,17 @@ async function imageUpload(req){
 async function sendTransactional(orderId,kind){
  const o=(await db.prepare('SELECT * FROM orders WHERE id=?').get(orderId));if(!o)return {ok:false};
  const esc=commerce.htmlesc,customer=o.customer_email;
- const summary=`<h2>Pedido ${esc(o.id)} · MAHACH</h2><p>Olá, ${esc(o.customer_name)}.</p><p>Itens: ${JSON.parse(o.items_json).map(i=>esc(i.qty+'x '+i.name)).join(', ')}</p>`;
+ const summary=`<h2>Pedido ${esc(o.id)} · LA COUR</h2><p>Olá, ${esc(o.customer_name)}.</p><p>Itens: ${JSON.parse(o.items_json).map(i=>esc(i.qty+'x '+i.name)).join(', ')}</p>`;
  const approved=kind==='approved',tracking=kind==='tracking';
  const total=(Number(o.subtotal)+Number(o.shipping_cost||0)).toFixed(2).replace('.',',');
  const trackingPage='https://rastreamento.correios.com.br/app/index.php';
- const customerSubject=approved?'MAHACH: pagamento aprovado · '+o.id:tracking?'MAHACH: seu código de rastreio · '+o.id:'MAHACH: pedido registrado · '+o.id;
+ const customerSubject=approved?'LA COUR: pagamento aprovado · '+o.id:tracking?'LA COUR: seu código de rastreio · '+o.id:'LA COUR: pedido registrado · '+o.id;
  const quickDelivery=['uber','99'].includes(o.delivery);
- const custHtml=summary+(tracking?`<p>Seu código dos Correios: <strong>${esc(o.tracking_code)}</strong></p><p>Consulte diretamente em <a href="${trackingPage}">Rastreamento Correios</a>.</p>`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe MAHACH.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':o.delivery==='correios'?'<p>O código de rastreamento dos Correios será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
+ const custHtml=summary+(tracking?`<p>Seu código dos Correios: <strong>${esc(o.tracking_code)}</strong></p><p>Consulte diretamente em <a href="${trackingPage}">Rastreamento Correios</a>.</p>`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe LA COUR.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':o.delivery==='correios'?'<p>O código de rastreamento dos Correios será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
  const result={};
  const flag=tracking?'tracking_email_sent':'customer_email_sent';
  if(customer&&!o[flag]){result.customer=await commerce.sendEmail(conf,customer,customerSubject,custHtml);if(result.customer.ok)(await db.prepare('UPDATE orders SET '+flag+'=1 WHERE id=?').run(orderId))}
- if(approved&&conf('ADMIN_EMAIL')&&!o.admin_email_sent){result.admin=await commerce.sendEmail(conf,conf('ADMIN_EMAIL'),'MAHACH: venda paga · '+o.id,summary+'<p>Pagamento verificado no Mercado Pago. Total: R$ '+total+'.</p>');if(result.admin.ok)(await db.prepare('UPDATE orders SET admin_email_sent=1 WHERE id=?').run(orderId))}
+ if(approved&&conf('ADMIN_EMAIL')&&!o.admin_email_sent){result.admin=await commerce.sendEmail(conf,conf('ADMIN_EMAIL'),'LA COUR: venda paga · '+o.id,summary+'<p>Pagamento verificado no Mercado Pago. Total: R$ '+total+'.</p>');if(result.admin.ok)(await db.prepare('UPDATE orders SET admin_email_sent=1 WHERE id=?').run(orderId))}
  return result;
 }
 async function processVerifiedPayment(paymentId){
@@ -289,7 +289,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   }else{
    if(!commerce.validCPF(data.pixCpf))return problem(res,400,'Confira o CPF para gerar o Pix');
    try{details=await commerce.createPixPayment(conf,o,data.pixCpf)}
-   catch(err){const diagnostic=String(err.diagnostic||'MP_UNAVAILABLE').slice(0,90);console.warn('[Pix MAHACH] retry failed: '+diagnostic);return json(res,502,{error:'O Mercado Pago ainda não gerou o Pix. Tente novamente para o mesmo pedido.',diagnostic});}
+   catch(err){const diagnostic=String(err.diagnostic||'MP_UNAVAILABLE').slice(0,90);console.warn('[Pix LA COUR] retry failed: '+diagnostic);return json(res,502,{error:'O Mercado Pago ainda não gerou o Pix. Tente novamente para o mesmo pedido.',diagnostic});}
    await db.prepare("UPDATE orders SET mp_payment_id=? WHERE id=? AND (mp_payment_id='' OR mp_payment_id IS NULL)").run(details.paymentId,o.id);
   }
   if(!details.qrCode)return json(res,502,{error:'Pagamento identificado, mas o código Pix ainda não está disponível. Tente novamente para o mesmo pedido.',diagnostic:'MP_QR_PENDING'});
@@ -352,7 +352,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    }catch(e){
     // Nunca registrar tokens, dados do pagador ou resposta bruta do provedor no log.
     const diagnostic=String(e.diagnostic||'MP_UNAVAILABLE').slice(0,90);
-    console.warn('[Pix MAHACH] creation failed: '+diagnostic);
+    console.warn('[Pix LA COUR] creation failed: '+diagnostic);
     return json(res,201,{reference:id,token,mode:'pix-retry',diagnostic,notice:'Pedido registrado, mas o Mercado Pago ainda não gerou o Pix. Tente novamente para o mesmo pedido.'});
    }
    if(!pix.qrCode)return json(res,201,{reference:id,token,mode:'pix-retry',diagnostic:'MP_QR_PENDING',notice:'Pedido registrado. Aguarde e tente consultar novamente o código Pix.'});
@@ -390,7 +390,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    if(!token)return problem(res,400,'Configure o token do Melhor Envio');
    const base=conf('MELHOR_ENVIO_SANDBOX')==='true'?'https://sandbox.melhorenvio.com.br':'https://melhorenvio.com.br';
    // Rota de consulta GET documentada pelo Melhor Envio (sem criar etiquetas).
-   const response=await fetch(base+'/api/v2/me/orders',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'MAHACH ('+(conf('SHIPPING_CONTACT_EMAIL')||'contato@mahach.com.br')+')'},signal:AbortSignal.timeout(10000)});
+   const response=await fetch(base+'/api/v2/me/orders',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'LA COUR ('+(conf('SHIPPING_CONTACT_EMAIL')||'cooper.machha@gmail.com')+')'},signal:AbortSignal.timeout(10000)});
    if(response.status===401)return problem(res,502,'Melhor Envio recusou este token (HTTP 401). Confira validade, ambiente e permissoes no Melhor Envio.');
    if(response.status===403)return problem(res,502,'Melhor Envio bloqueou ou negou a consulta de etiquetas (HTTP 403). Verifique as permissoes do token; teste inconclusivo.');
    if(!response.ok)return problem(res,502,'Melhor Envio respondeu HTTP '+response.status+' ao consultar etiquetas.');
@@ -403,7 +403,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   }
   if(provider==='email'){
    if(!conf('RESEND_API_KEY')||!conf('MAIL_FROM')||!conf('ADMIN_EMAIL'))return problem(res,400,'Configure API Key, remetente verificado e e-mail da loja');
-   const result=await commerce.sendEmail(conf,conf('ADMIN_EMAIL'),'MAHACH · teste de e-mail','<p>A configuração do provedor de e-mail da MAHACH foi testada com sucesso.</p>');
+   const result=await commerce.sendEmail(conf,conf('ADMIN_EMAIL'),'LA COUR · teste de e-mail','<p>A configuração do provedor de e-mail da LA COUR foi testada com sucesso.</p>');
    if(!result.ok)return problem(res,502,result.reason);
    return json(res,200,{ok:true,message:'E-mail de teste aceito pelo provedor. Confirme a chegada na caixa de entrada.'});
   }
@@ -500,5 +500,5 @@ const server=http.createServer(async(req,res)=>{
  if(!rate(req,'general',800,60000))return problem(res,429,'Limite de requisições');
  try{await ready;const u=new URL(req.url,'http://localhost');if(u.pathname.startsWith('/api/'))await api(req,res,u);else if(['GET','HEAD'].includes(req.method))await staticFile(req,res,u);else problem(res,405,'Método não permitido')}catch(e){if(process.env.NODE_ENV!=='production'&&!e.status)console.error(e);problem(res,e.status||500,e.status?e.message:'Erro interno. Tente novamente.')}
 });
-if(require.main===module){ready.then(()=>server.listen(Number(process.env.PORT)||3000,process.env.HOST||'0.0.0.0',()=>console.log('MAHACH PostgreSQL iniciado na porta '+(process.env.PORT||3000)))).catch(e=>{console.error('Falha na inicialização PostgreSQL:',e.message);process.exitCode=1;db.close().catch(()=>{})})}
+if(require.main===module){ready.then(()=>server.listen(Number(process.env.PORT)||3000,process.env.HOST||'0.0.0.0',()=>console.log('LA COUR PostgreSQL iniciado na porta '+(process.env.PORT||3000)))).catch(e=>{console.error('Falha na inicialização PostgreSQL:',e.message);process.exitCode=1;db.close().catch(()=>{})})}
 module.exports={server,db,ready,searchText};

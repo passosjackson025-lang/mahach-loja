@@ -1,6 +1,6 @@
-# MAHACH — Site principal corrigido (PostgreSQL + painel V2)
+# LA COUR — Site principal corrigido (PostgreSQL + painel V2)
 
-Este ZIP **consolida** o site completo MAHACH V5.0.2, a adaptação PostgreSQL V1 e a correção administrativa/fotos V2. **Não é uma homologação de pagamentos nem uma publicação pronta na Render.**
+Este ZIP **consolida** o site completo LA COUR V5.0.2, a adaptação PostgreSQL V1 e a correção administrativa/fotos V2. **Não é uma homologação de pagamentos nem uma publicação pronta na Render.**
 
 ## Para instalar na sua pasta principal existente, sem criar outra pasta
 

@@ -1,9 +1,9 @@
 'use strict';
-// MAHACH Checkout. Os dados do cartão NÃO passam por este site.
+// LA COUR Checkout. Os dados do cartão NÃO passam por este site.
 (function(){
  const markup=`<dialog class="checkout-dialog mahach-split" id="checkoutDialog" aria-labelledby="checkoutTitle">
  <div class="mahach-shell"><div class="mahach-shell-light">
- <div class="checkout-head"><div><span class="eyebrow">ELEXIER · SUA COMPRA</span><h2 id="checkoutTitle">Finalizar compra.</h2><p class="checkout-head-sub">Perfumaria selecionada, compra com segurança.</p></div><button type="button" data-checkout-close aria-label="Fechar">×</button></div>
+ <div class="checkout-head"><div><span class="eyebrow">LA COUR · SUA COMPRA</span><h2 id="checkoutTitle">Finalizar compra.</h2><p class="checkout-head-sub">Perfumaria selecionada, compra com segurança.</p></div><button type="button" data-checkout-close aria-label="Fechar">×</button></div>
  <div class="checkout-body"><div class="checkout-steps" aria-label="Etapas"><span>Dados</span><span>Entrega</span><span>Pagamento</span><span>Resumo</span></div>
  <p class="checkout-intro">Confira seus dados, a entrega e o pagamento. No Pix, o QR Code aparece após registrar o pedido.</p>
  <form id="checkoutForm" class="mahach-checkout-layout">
@@ -28,18 +28,18 @@
    <button class="quote-button" type="button" id="quoteShipping">Calcular frete</button><div id="shippingResults" aria-live="polite"></div><p class="shipping-choice" id="shippingSelection" role="status"></p></div>
   <fieldset class="mahach-payment"><legend><span class="mahach-section-index" id="mahachPaymentStepNumber" aria-hidden="true">03</span><span>Forma de pagamento</span></legend><div class="checkout-options" id="paymentOptions">
    <label><input type="radio" name="payment" value="pix" checked> Pix com QR Code <small>Sem sair do site</small></label>
-  <div id="pixCpfArea" class="checkout-pix-cpf"><label>CPF do pagador (solicitado pelo Mercado Pago para o Pix)<input name="pixCpf" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="000.000.000-00"></label><small>Usado somente para gerar o Pix; a MAHACH nao armazena esse documento.</small></div>
+  <div id="pixCpfArea" class="checkout-pix-cpf"><label>CPF do pagador (solicitado pelo Mercado Pago para o Pix)<input name="pixCpf" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="000.000.000-00"></label><small>Usado somente para gerar o Pix; a LA COUR nao armazena esse documento.</small></div>
    <label><input type="radio" name="payment" value="card"> Cartão de crédito <small>Via Mercado Pago</small></label>
    <label><input type="radio" name="payment" value="cash"> Pagar na retirada <small>Somente retirada na loja</small></label>
   </div></fieldset>
   <p class="checkout-notice" id="checkoutShippingNotice">Retirada sem frete. Confirme o endereço e o horário antes de ir à loja.</p>
-  <label class="checkout-marketing"><input type="checkbox" name="marketingOptIn" value="on"> Quero receber ofertas e novidades da ELEXIER por e-mail e WhatsApp. Posso cancelar a autorização quando quiser.</label>
-  <p class="checkout-legal">Usaremos seus dados para processar o pedido, mesmo que você não aceite marketing. Consulte a <a href="/privacidade.html" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>. A ELEXIER não recebe nem armazena os dados completos do cartão.</p>
+  <label class="checkout-marketing"><input type="checkbox" name="marketingOptIn" value="on"> Quero receber ofertas e novidades da LA COUR por e-mail e WhatsApp. Posso cancelar a autorização quando quiser.</label>
+  <p class="checkout-legal">Usaremos seus dados para processar o pedido, mesmo que você não aceite marketing. Consulte a <a href="/privacidade.html" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>. A LA COUR não recebe nem armazena os dados completos do cartão.</p>
   <p id="checkoutError" class="checkout-error" role="alert" hidden></p>
   </div>
 
  </form>
-  <div id="orderSuccess" tabindex="-1" hidden><span class="order-eyebrow">ELEXIER · PAGAMENTO</span><h3 id="orderHeading">Pedido registrado</h3><p id="orderReference"></p><p id="orderInstructions">Seu pedido foi registrado.</p>
+  <div id="orderSuccess" tabindex="-1" hidden><span class="order-eyebrow">LA COUR · PAGAMENTO</span><h3 id="orderHeading">Pedido registrado</h3><p id="orderReference"></p><p id="orderInstructions">Seu pedido foi registrado.</p>
   <section id="orderPix" class="mahach-pix" hidden aria-label="Pagamento Pix">
    <p><strong>Pix da sua compra</strong> — use o app do seu banco para pagar.</p>
    <p id="pixUnavailableMessage" class="pix-unavailable" role="status" hidden>O Pix ainda não está disponível. Você pode tentar novamente sem criar outro pedido.</p>
@@ -52,12 +52,12 @@
   <a id="orderTrack" class="consult-link" target="_blank" rel="noopener noreferrer" hidden>Acompanhar entrega</a></div>
  </div></div>
   <aside class="mahach-checkout-side" aria-label="Resumo do pedido">
-   <div class="mahach-side-top"><div class="mahach-side-label">ELEXIER · SEU PEDIDO</div><h3>Seu pedido</h3><p id="mahachSummaryCount"></p></div>
+   <div class="mahach-side-top"><div class="mahach-side-label">LA COUR · SEU PEDIDO</div><h3>Seu pedido</h3><p id="mahachSummaryCount"></p></div>
    <div id="mahachSummaryItems" class="mahach-summary-products"></div>
    <div class="checkout-total checkout-summary" id="checkoutTotal" role="status" aria-live="polite"></div>
    <button class="button" id="submitOrder" form="checkoutForm" type="submit">Continuar para pagamento →</button>
-   <p class="mahach-side-safe">Pagamento processado pelo Mercado Pago. Dados do cartão não passam pela MAHACH.</p>
-   <div class="mahach-side-perks"><p><span aria-hidden="true">◇</span> Compra segura</p><p><span aria-hidden="true">↗</span> Acompanhe seu pedido</p><p><span aria-hidden="true">✦</span> O cuidado MAHACH em cada detalhe</p></div>
+   <p class="mahach-side-safe">Pagamento processado pelo Mercado Pago. Dados do cartão não passam pela LA COUR.</p>
+   <div class="mahach-side-perks"><p><span aria-hidden="true">◇</span> Compra segura</p><p><span aria-hidden="true">↗</span> Acompanhe seu pedido</p><p><span aria-hidden="true">✦</span> O cuidado LA COUR em cada detalhe</p></div>
   </aside>
  </div></dialog>`;
  const pixCss=document.createElement('link');pixCss.rel='stylesheet';pixCss.href='/pix-checkout.css';document.head.appendChild(pixCss);
@@ -65,7 +65,7 @@
  const d=document.getElementById('checkoutDialog'),form=document.getElementById('checkoutForm'),q=id=>document.getElementById(id);
  let items=[],checkoutEnabled=false,selectedQuote='',selectedCost=null,pickupAddress='',onlinePayments=false,pixPoll=null,activeOrder=null;
  const side=d.querySelector('.mahach-checkout-side');
- const previewNotice=document.createElement('p');previewNotice.id='checkoutPreviewNotice';previewNotice.textContent='Estamos preparando a MAHACH para compras online. O catálogo está disponível, mas ainda não estamos recebendo pedidos ou pagamentos pelo site.';previewNotice.hidden=true;previewNotice.style.cssText='padding:1.25rem;line-height:1.6;margin:1rem;border:1px solid #ccbfa8;border-radius:10px';form.before(previewNotice);
+ const previewNotice=document.createElement('p');previewNotice.id='checkoutPreviewNotice';previewNotice.textContent='Estamos preparando a LA COUR para compras online. O catálogo está disponível, mas ainda não estamos recebendo pedidos ou pagamentos pelo site.';previewNotice.hidden=true;previewNotice.style.cssText='padding:1.25rem;line-height:1.6;margin:1rem;border:1px solid #ccbfa8;border-radius:10px';form.before(previewNotice);
  function syncAvailability(){if(!d.open)return;form.hidden=!checkoutEnabled;side.hidden=!checkoutEnabled;previewNotice.hidden=checkoutEnabled;d.classList.toggle('mahach-preview',!checkoutEnabled);}
  fetch('/api/store/status',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{checkoutEnabled=v?.checkoutEnabled===true;syncAvailability()}).catch(()=>{});
  fetch('/api/meta',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(x=>{pickupAddress=String(x?.pickupAddress||'');onlinePayments=x?.onlinePayments===true;refreshDelivery()}).catch(()=>{});
@@ -81,12 +81,12 @@
   for(const item of items){
    const row=document.createElement('div');row.className='mahach-summary-product';
    const thumb=document.createElement('div');thumb.className='mahach-product-thumbnail';
-   const image=String(item.p.image||'').trim();
+   const image=String(window.laCourProductImage?.(item.p)||item.p.image||'').trim();
    if(image && (/^https:\/\//i.test(image)||/^\/(?!\/)/.test(image))){
     const img=document.createElement('img');img.src=image;img.loading='lazy';img.alt='';img.addEventListener('error',()=>{img.remove();thumb.textContent='✦'});thumb.append(img)
    } else thumb.textContent='✦';
    const detail=document.createElement('div');detail.className='mahach-product-detail';
-   const title=document.createElement('strong');title.textContent=String(item.p.name||'Produto MAHACH');
+   const title=document.createElement('strong');title.textContent=String(item.p.name||'Produto LA COUR');
    const qty=document.createElement('small');qty.textContent='Quantidade: '+item.qty;
    detail.append(title,qty);
    const price=document.createElement('b');price.textContent=currency(Number(item.p.price)*item.qty);
@@ -120,7 +120,7 @@
   const cash=form.querySelector('[name="payment"][value="cash"]');cash.disabled=delivery;
   if(cash.checked&&delivery)form.querySelector('[name="payment"][value="pix"]').checked=true;
   selectedQuote='';selectedCost=null;q('shippingResults').replaceChildren();q('shippingSelection').textContent='';
-  q('checkoutShippingNotice').textContent=mode==='transportadora'?'Insira seu CEP e escolha uma transportadora habilitada para perfumes antes de pagar.':delivery?'Uber/99: a corrida NÃO está incluída no total e será combinada separadamente com a MAHACH.':pickupAddress?'Retirada sem frete. Local: '+pickupAddress:'Retirada sem frete. Endereço e horário serão informados pela loja.';
+  q('checkoutShippingNotice').textContent=mode==='transportadora'?'Insira seu CEP e escolha uma transportadora habilitada para perfumes antes de pagar.':delivery?'Uber/99: a corrida NÃO está incluída no total e será combinada separadamente com a LA COUR.':pickupAddress?'Retirada sem frete. Local: '+pickupAddress:'Retirada sem frete. Endereço e horário serão informados pela loja.';
   updateTotal();updateSubmitLabel();
  }
  function updateSubmitLabel(){
@@ -189,7 +189,7 @@
   d.querySelector('.checkout-head-sub').hidden=true;
   q('checkoutTitle').textContent=isPix?'Pagamento Pix':'Pedido registrado';
   q('orderSuccess').dataset.phase=isPix?'payment':'registered';
-  q('orderSuccess').querySelector('.order-eyebrow').textContent=isPix?'ELEXIER · PAGAMENTO SEGURO':'ELEXIER · PEDIDO';
+  q('orderSuccess').querySelector('.order-eyebrow').textContent=isPix?'LA COUR · PAGAMENTO SEGURO':'LA COUR · PEDIDO';
   q('orderHeading').hidden=isPix;q('orderHeading').textContent='Pedido registrado';
   q('orderReference').textContent='Pedido: '+result.reference;q('orderReference').hidden=isPix;
   q('orderInstructions').textContent=isPix?'':(result.notice||'Pedido recebido. Aguarde a confirmação da loja.');q('orderInstructions').hidden=isPix;
@@ -202,7 +202,7 @@
   if(!activeOrder)return;
   q('orderSuccess').dataset.phase='confirmed';
   q('checkoutTitle').textContent='Pagamento confirmado';
-  q('orderSuccess').querySelector('.order-eyebrow').textContent='ELEXIER · COMPRA CONFIRMADA';
+  q('orderSuccess').querySelector('.order-eyebrow').textContent='LA COUR · COMPRA CONFIRMADA';
   q('orderHeading').hidden=false;q('orderHeading').textContent='Pagamento aprovado!';
   q('orderReference').hidden=false;
   q('orderInstructions').hidden=false;q('orderInstructions').textContent='Pagamento confirmado pelo Mercado Pago. O pedido segue agora para a loja. Acompanhe o preparo e o envio na página do seu pedido.';
