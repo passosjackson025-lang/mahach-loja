@@ -17,7 +17,8 @@
     "test:fotos": "node scripts/test-cloud-storage.cjs",
     "test:publicacao": "node scripts/testar-publicacao.cjs",
     "publicacao:check": "node --env-file-if-exists=.env scripts/auditar-publicacao.cjs",
-    "fotos:migrar": "node --env-file-if-exists=.env scripts/migrar-fotos-cloudinary.cjs"
+    "fotos:migrar": "node --env-file-if-exists=.env scripts/migrar-fotos-cloudinary.cjs",
+    "test:catalog": "node scripts/test-catalog-filters.cjs"
   },
   "dependencies": {
     "pg": "^8.16.3"

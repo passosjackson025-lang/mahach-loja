@@ -26,7 +26,23 @@ async function loadFeatured(){
   }catch{card.querySelector('[data-featured-price]').textContent='Consulte disponibilidade'}
  }));
 }
-function wa(text){return 'https://wa.me/5511995209827?text='+encodeURIComponent(text)}
+const sectionLabels={todos:'Todos',arabes:'Árabes',importados:'Importados',nicho:'Nicho',masculino:'Masculino',feminino:'Feminino',unissex:'Unissex'};
+let section=Object.hasOwn(sectionLabels,catalogParams.get('section'))?catalogParams.get('section'):'todos';
+const selectedBrands=new Set(catalogParams.getAll('marca').filter(Boolean));
+let priceLow=Math.max(0,Number(catalogParams.get('priceMin'))||0),priceHigh=catalogParams.has('priceMax')?Math.max(0,Number(catalogParams.get('priceMax'))||0):null,priceCeiling=6000,priceTimer;
+const bagIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14l1 14H4L5 7ZM8 8V6a4 4 0 0 1 8 0v2"/></svg>';
+const heartIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 4.7c-2-2-5.2-1.8-7.1.2L12 6.4l-1.4-1.5C8.7 2.9 5.5 2.7 3.5 4.7c-2.1 2.1-2 5.5.1 7.6L12 21l8.4-8.7c2.1-2.1 2.2-5.5.1-7.6Z"/></svg>';
+let favorites=new Set();try{favorites=new Set(JSON.parse(localStorage.getItem('lacour-favorites')||'[]').slice(0,300))}catch{}
+function displayName(p){
+ const known={'6a90e97b833a9316a807092e':'Asad','6a90ec29409abe2003085f0d':'Khamrah','6a911139d4441a8ea109f905':'Badee Al Oud — Oud for Glory','6a90eaa593942f9d8b03a044':'Fakhar Black'};if(known[p.id])return known[p.id];
+ let text=cleanLabel(p.name).replace(/\b(?:\d+(?:[.,]\d+)?\s*(?:ML|KG|G)|EAU DE PARFUM|EAU DE TOILETTE|EDP|EDT|UNISSEX|UNISEX|MASCULINO|FEMININO|MASC|FEM)\b/gi,' ').replace(/^PERFUME\s+/i,'');
+ text=text.replace(/\s+/g,' ').trim();
+ for(const part of String(p.brand||'').split('|')){const b=part.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');if(b)text=text.replace(new RegExp('(?:^'+b+'\\s+|\\s+'+b+'$)','ig'),' ').trim()}
+ return text.replace(/\s+/g,' ').replace(/^[\s—-]+|[\s—-]+$/g,'').trim()||cleanLabel(p.name);
+}
+async function quickAdd(id){try{const p=(await request('/api/products/'+encodeURIComponent(id))).product;productsById.set(id,p);add(id)}catch(e){toast(e.message)}}
+
+function wa(text){return 'https://wa.me/5511940856397?text='+encodeURIComponent(text)}
 function toast(message){const el=$('.toast');if(!el)return;el.textContent=message;el.hidden=false;el.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>{el.classList.remove('show');el.hidden=true},5000)}
 async function request(url,options){const r=await fetch(url,options);const o=await r.json();if(!r.ok)throw Error(o.error||'Não foi possível concluir');return o}
 function openDialog(d,trigger=document.activeElement){if(!d?.open){dialogTriggers.set(d,trigger);dialogScrollY.set(d,window.scrollY);d.showModal();document.body.classList.add('modal-open')}}
@@ -34,113 +50,88 @@ function closeDialog(d){if(d?.open)d.close()}
 // Keep display labels clean even for records saved before the CSV emoji cleanup.
 function cleanLabel(text){return String(text??'').replace(/[\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0E\uFE0F\u200D\u20E3]/gu,'').replace(/\s+/g,' ').trim()}
 function renderCategories(){
- const arr=[{id:'todos',name:'Todos os produtos',subtitle:'',total:categories.reduce((sum,c)=>sum+(c.total||0),0)},...categories];
+ const arr=[{id:'todos',name:'Todos os produtos',subtitle:'',total:categories.reduce((n,c)=>n+(c.total||0),0)},...categories];
  $$('[data-category-list]').forEach(container=>{
-   const data=container.hasAttribute('data-include-all')?arr:categories;
-   const isFilter=container.classList.contains('sidebar-categories');
-   container.innerHTML=data.map(c=>`<a href="/produtos/index.html?categoria=${encodeURIComponent(c.id)}" ${isFilter&&$('#products')?`data-catalog-category="${esc(c.id)}"`:''} ${c.id===category&&$('#products')?'aria-current="page"':''}><span>${esc(cleanLabel(c.name))}</span>${isFilter?`<small aria-label="${Number(c.total||0)} produtos">${Number(c.total||0).toLocaleString('pt-BR')}</small>`:arrow}</a>`).join('');
+  const data=container.hasAttribute('data-include-all')?arr:categories;
+  container.innerHTML=data.map(c=>`<a href="/produtos/index.html?categoria=${encodeURIComponent(c.id)}"><span>${esc(cleanLabel(c.name))}</span>${arrow}</a>`).join('');
  });
- const selected=categories.find(c=>c.id===category),name=cleanLabel(selected?.name||'Nossos produtos');
- if($('#mobileCategoryLabel'))$('#mobileCategoryLabel').textContent=cleanLabel(selected?.name||'Todos os produtos');
- if($('#catalogTitle')){
-  $('#catalogTitle').textContent=name;
-  $('#catalogSubtitle').textContent=selected?.subtitle||'Encontre o seu próximo ritual.';
-  $('#breadcrumbCategory').textContent=selected?name:'';
-  $$('.category-crumb').forEach(x=>x.hidden=!selected);
-  document.title=name+' — LA COUR';
- }
+ const selected=categories.find(c=>c.id===category),name=category==='perfumes'?'Perfumes':cleanLabel(selected?.name||'Perfumes');
+ if($('#mobileCategoryLabel'))$('#mobileCategoryLabel').textContent=sectionLabels[section]||name;
+ if($('#catalogTitle')){$('#catalogTitle').textContent=name;$('#catalogSubtitle').textContent=selected?.subtitle||'Essências que transformam o extraordinário em rotina.';$('#breadcrumbCategory').textContent=selected?name:'';$$('.category-crumb').forEach(x=>x.hidden=!selected);document.title=name+' — LA COUR'}
+ renderSections();
 }
 let brandExpanded=false,catalogRequestId=0,metaRequestId=0,detailRequestId=0,searchTimer;
+function renderSections(){
+ const buttons=Object.entries(sectionLabels).map(([key,label])=>`<button type="button" data-section="${key}" aria-pressed="${section===key}" class="${section===key?'is-active':''}">${esc(label)}</button>`).join('');
+ if($('#perfumeTabs'))$('#perfumeTabs').innerHTML=buttons;
+ if($('#sectionFilters'))$('#sectionFilters').innerHTML=Object.entries(sectionLabels).map(([key,label])=>`<label class="filter-checkbox"><input type="checkbox" data-section="${key}" ${section===key?'checked':''}><span>${esc(label)}</span></label>`).join('');
+}
 function catalogUrl(mode='replace'){
- if(!$('#products'))return;
- const url=new URL(location.href);
+ if(!$('#products'))return;const url=new URL(location.href);
  if(category!=='todos')url.searchParams.set('categoria',category);else url.searchParams.delete('categoria');
  if(search)url.searchParams.set('q',search);else url.searchParams.delete('q');
- if(brand)url.searchParams.set('marca',brand);else url.searchParams.delete('marca');
+ url.searchParams.delete('marca');selectedBrands.forEach(x=>url.searchParams.append('marca',x));
+ if(section!=='todos')url.searchParams.set('section',section);else url.searchParams.delete('section');
+ if(priceLow>0)url.searchParams.set('priceMin',String(priceLow));else url.searchParams.delete('priceMin');
+ if(priceHigh!==null)url.searchParams.set('priceMax',String(priceHigh));else url.searchParams.delete('priceMax');
  history[mode==='push'?'pushState':'replaceState']({},'',url);
 }
-// Evita salto causado por resultados mais curtos e pela âncora automática do navegador.
-function holdCatalogPosition(){
- const grid=$('#products');if(!grid)return;
- const y=window.scrollY,top=grid.getBoundingClientRect().top+y;
- const minimum=Math.max(0,window.innerHeight+y-top+24);
- if(y+window.innerHeight>top)grid.style.minHeight=Math.max(0,Math.ceil(minimum))+'px';
- return y;
-}
-function keepCatalogPosition(y){if(!Number.isFinite(y))return;requestAnimationFrame(()=>{if(Math.abs(window.scrollY-y)>2)window.scrollTo({top:y,behavior:'instant'})})}
-window.addEventListener('scroll',()=>{
- const grid=$('#products');if(!grid||!grid.style.minHeight)return;
- // Quando o visitante volta ao início da listagem, elimina o espaço reservado.
- const top=grid.getBoundingClientRect().top;
- if(top>window.innerHeight+40)grid.style.minHeight='';
-},{passive:true});
-async function refreshCatalogMeta(){
- const id=++metaRequestId;
- const out=await request('/api/meta?category='+encodeURIComponent(category));
- if(id!==metaRequestId)return;
- categories=out.categories;brands=out.brands;
- renderCategories();renderBrands();
-}
+function holdCatalogPosition(){const grid=$('#products');if(!grid)return;const y=scrollY,top=grid.getBoundingClientRect().top+y;const minimum=Math.max(0,innerHeight+y-top+24);if(y+innerHeight>top)grid.style.minHeight=Math.ceil(minimum)+'px';return y}
+function keepCatalogPosition(y){if(Number.isFinite(y))requestAnimationFrame(()=>{if(Math.abs(scrollY-y)>2)scrollTo({top:y,behavior:'instant'})})}
+window.addEventListener('scroll',()=>{const grid=$('#products');if(grid?.style.minHeight&&grid.getBoundingClientRect().top>innerHeight+40)grid.style.minHeight=''},{passive:true});
+async function refreshCatalogMeta(){const id=++metaRequestId;const out=await request('/api/meta?category='+encodeURIComponent(category));if(id!==metaRequestId)return;categories=out.categories;brands=out.brands;priceCeiling=Math.max(1000,Number(out.priceMax)||6000);renderCategories();renderBrands();renderPrice()}
 function changeCategory(next,{push=true}={}){
  if(!$('#products')||!categories.some(c=>c.id===next)&&next!=='todos')return;
- if(category===next&&search===''&&brand==='')return;
- clearTimeout(searchTimer);
- const y=holdCatalogPosition();
- category=next;brand='';search='';page=1;brandExpanded=false;
- if($('#search'))$('#search').value='';
- if($('#brandSearch'))$('#brandSearch').value='';
- if(push)catalogUrl('push');
- renderCategories();renderBrands();
- refreshCatalogMeta().catch(()=>toast('Não foi possível atualizar as marcas.'));
- loadProducts({preserveY:y});
+ clearTimeout(searchTimer);const y=holdCatalogPosition();category=next;selectedBrands.clear();brand='';search='';section='todos';page=1;brandExpanded=false;
+ if($('#search'))$('#search').value='';if($('#brandSearch'))$('#brandSearch').value='';
+ if(push)catalogUrl('push');renderCategories();renderBrands();refreshCatalogMeta().catch(()=>{});loadProducts({preserveY:y});
+}
+function selectSection(next){
+ if(!Object.hasOwn(sectionLabels,next))return;
+ const y=holdCatalogPosition();section=section===next&&next!=='todos'?'todos':next;
+ category=section==='todos'?(document.body.dataset.category||'todos'):'perfumes';page=1;
+ catalogUrl('push');renderCategories();refreshCatalogMeta().catch(()=>{});loadProducts({preserveY:y});
 }
 function renderBrands(){
- const list=$('#brandList'),search=$('#brandSearch'),toggle=$('#brandToggle'),empty=$('#brandEmpty');
- if(!list)return;
- const query=cleanLabel(search.value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const list=$('#brandList');if(!list)return;
+ const input=$('#brandSearch'),query=cleanLabel(input.value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  const matches=brands.filter(b=>cleanLabel(b.brand).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(query));
- const chosen=matches.find(b=>b.brand===brand);
+ const preferred=['LATTAFA','ARD AL ZAAFARAN','AJMAL','MAISON ALHAMBRA','FRAGRANCE WORLD','RASASI'];
+ matches.sort((a,b)=>{const ai=preferred.indexOf(a.brand.toUpperCase()),bi=preferred.indexOf(b.brand.toUpperCase());return (ai<0?99:ai)-(bi<0?99:bi)});
  const visible=query||brandExpanded?matches:matches.slice(0,8);
- // A selected brand always remains visible when the list is collapsed.
- if(!query&&!brandExpanded&&brand&&!visible.some(b=>b.brand===brand)&&chosen)visible.unshift(chosen);
- list.innerHTML=`<button type="button" class="brand-option${brand===''?' is-selected':''}" data-brand="" aria-pressed="${brand===''?'true':'false'}"><span>Todas as marcas</span></button>`+
- visible.map(b=>`<button type="button" class="brand-option${brand===b.brand?' is-selected':''}" data-brand="${esc(b.brand)}" aria-pressed="${brand===b.brand?'true':'false'}"><span>${esc(cleanLabel(b.brand))}</span><small>${Number(b.total||0).toLocaleString('pt-BR')}</small></button>`).join('');
- empty.hidden=matches.length>0;
- toggle.hidden=Boolean(query)||matches.length<=8;
- toggle.textContent=brandExpanded?'Mostrar menos':`Ver todas as marcas (${brands.length})`;
- toggle.setAttribute('aria-expanded',String(brandExpanded));
- const clear=$('#clearFilters');if(clear)clear.hidden=!brand&&!search.value;
+ for(const b of matches)if(selectedBrands.has(b.brand)&&!visible.includes(b))visible.push(b);
+ list.innerHTML=visible.map(b=>`<label class="filter-checkbox"><input type="checkbox" data-brand="${esc(b.brand)}" ${selectedBrands.has(b.brand)?'checked':''}><span>${esc(cleanLabel(b.brand))}</span></label>`).join('');
+ $('#brandEmpty').hidden=matches.length>0;$('#brandToggle').hidden=Boolean(query)||matches.length<=8;$('#brandToggle').textContent=brandExpanded?'Mostrar menos':`Ver todas (${brands.length})`;$('#brandToggle').setAttribute('aria-expanded',String(brandExpanded));
+ $('#clearFilters').hidden=selectedBrands.size===0&&section==='todos'&&priceLow===0&&priceHigh===null&&!search;
 }
+function renderPrice(){
+ if(!$('#priceMin'))return;const cap=Math.max(priceCeiling,priceHigh||0,priceLow);
+ $('#priceMin').max=cap;$('#priceMax').max=cap;$('#priceMin').value=priceLow;$('#priceMax').value=priceHigh??cap;
+ $('#priceMinValue').textContent=money(priceLow);$('#priceMaxValue').textContent=money(priceHigh??cap);
+}
+function clearCatalogFilters(){clearTimeout(searchTimer);const y=holdCatalogPosition();selectedBrands.clear();brand='';section='todos';priceLow=0;priceHigh=null;search='';category=document.body.dataset.category||'todos';page=1;$('#search').value='';$('#brandSearch').value='';brandExpanded=false;renderCategories();renderBrands();renderPrice();catalogUrl();refreshCatalogMeta().catch(()=>{});loadProducts({preserveY:y})}
 function renderFilters(){
  const fs=$('#filterForm');if(!fs)return;
- const field=$('#brandField');
- if(!field)return;
- $('#brandSearch').addEventListener('input',()=>renderBrands());
- $('#brandToggle').addEventListener('click',()=>{brandExpanded=!brandExpanded;renderBrands()});
- field.addEventListener('click',event=>{
-  const choice=event.target.closest('[data-brand]');if(!choice)return;
-  const selected=choice.dataset.brand;
-  if(brand!==selected){clearTimeout(searchTimer);const y=holdCatalogPosition();brand=selected;page=1;catalogUrl();loadProducts({preserveY:y})}
-  renderBrands();
-  [...field.querySelectorAll('[data-brand]')].find(button=>button.dataset.brand===selected)?.focus({preventScroll:true});
+ $('#brandSearch').addEventListener('input',renderBrands);$('#brandToggle').addEventListener('click',()=>{brandExpanded=!brandExpanded;renderBrands()});
+ fs.addEventListener('change',e=>{
+  if(e.target.matches('[data-brand]')){const value=e.target.dataset.brand;if(e.target.checked)selectedBrands.add(value);else selectedBrands.delete(value);brand=[...selectedBrands][0]||'';page=1;const y=holdCatalogPosition();catalogUrl();renderBrands();loadProducts({preserveY:y})}
  });
- fs.addEventListener('submit',event=>event.preventDefault());
- $('#clearFilters').addEventListener('click',()=>{clearTimeout(searchTimer);const y=holdCatalogPosition();brand='';$('#brandSearch').value='';brandExpanded=false;page=1;renderBrands();catalogUrl();loadProducts({preserveY:y})});
- renderBrands();
+ fs.addEventListener('submit',e=>e.preventDefault());$('#clearFilters').addEventListener('click',clearCatalogFilters);
+ const priceInput=e=>{let lo=Number($('#priceMin').value),hi=Number($('#priceMax').value);if(lo>hi){if(e.target.id==='priceMin')lo=hi;else hi=lo}priceLow=lo;priceHigh=hi>=priceCeiling?null:hi;renderPrice();clearTimeout(priceTimer);priceTimer=setTimeout(()=>{page=1;catalogUrl();renderBrands();loadProducts({preserveY:holdCatalogPosition()})},220)};
+ $('#priceMin').addEventListener('input',priceInput);$('#priceMax').addEventListener('input',priceInput);renderBrands();renderPrice();
 }
-async function loadProducts({preserveY}={}){const grid=$('#products');if(!grid)return;
- if(!Number.isSafeInteger(page)||page<1)page=1;
+async function loadProducts({preserveY}={}){
+ const grid=$('#products');if(!grid)return;if(!Number.isSafeInteger(page)||page<1)page=1;
  const requestId=++catalogRequestId;grid.classList.add('catalog-changing');
- const qs=new URLSearchParams({page:String(page),limit:'24',category,q:search,brand,sort});
+ const qs=new URLSearchParams({page:String(page),limit:'24',category,q:search,sort,section});selectedBrands.forEach(b=>qs.append('brand',b));if(priceLow>0)qs.set('priceMin',priceLow);if(priceHigh!==null)qs.set('priceMax',priceHigh);
  try{const out=await request('/api/products?'+qs);if(requestId!==catalogRequestId)return;total=out.total;currentPage=out.products;for(const p of currentPage)productsById.set(p.id,p);
- grid.innerHTML=out.products.map(p=>`<article class="product-card"><div class="product-photo"><button data-detail="${esc(p.id)}" class="detail-open" aria-label="Conhecer ${esc(p.name)}"><img src="${esc(img(p))}" alt="${img(p)!==emptyImage?'Foto do produto '+esc(p.name):'Foto indisponível'}" width="800" height="1000" loading="lazy"></button></div><div class="product-info"><h3><button data-detail="${esc(p.id)}">${esc(p.name)}</button></h3><p>${esc(p.brand||'LA COUR')}</p><span class="price">${money(p.price)}</span><button class="product-link" data-detail="${esc(p.id)}">Conhecer ${arrow}</button></div></article>`).join('');
- window.mahachRevealCards?.(grid);
- $('#resultCount').textContent=`${Number(total).toLocaleString('pt-BR')} ${total===1?'produto':'produtos'} · página ${page} de ${Math.max(1,Math.ceil(total/24))}`;
- $('#emptySearch').hidden=!!out.products.length;$('#activeFilters').textContent=[brand&&'Marca: '+cleanLabel(brand)].filter(Boolean).join(' · ');
- renderPagination();
- keepCatalogPosition(preserveY);
- }catch(e){if(requestId!==catalogRequestId)return;grid.innerHTML='<p>Não foi possível carregar o catálogo. Inicie o servidor com <strong>npm start</strong> e atualize a página.</p>';$('#resultCount').textContent='Catálogo indisponível';console.warn(e)}finally{if(requestId===catalogRequestId)grid.classList.remove('catalog-changing')}
+ grid.innerHTML=currentPage.map(p=>`<article class="product-card"><div class="product-photo"><button data-detail="${esc(p.id)}" class="detail-open" aria-label="Conhecer ${esc(p.name)}"><img src="${esc(img(p))}" alt="${img(p)!==emptyImage?'Foto de '+esc(p.name):'Foto indisponível'}" width="800" height="1000" loading="lazy"></button><button class="product-favorite" data-favorite="${esc(p.id)}" aria-label="Favoritar ${esc(displayName(p))}" aria-pressed="${favorites.has(p.id)}">${heartIcon}</button></div><div class="product-info"><h3><button data-detail="${esc(p.id)}" title="${esc(p.name)}">${esc(displayName(p))}</button></h3><p>${esc(cleanLabel(p.brand||'LA COUR'))}</p><span class="price">${money(p.price)}</span><button class="quick-add" data-quick-add="${esc(p.id)}" aria-label="Adicionar ${esc(displayName(p))} à sacola" ${p.stock===0?'disabled':''}>${bagIcon}</button></div></article>`).join('');
+ window.mahachRevealCards?.(grid);$('#resultCount').textContent=`${Number(total).toLocaleString('pt-BR')} ${total===1?'produto':'produtos'}`;$('#emptySearch').hidden=!!currentPage.length;
+ $('#activeFilters').textContent=[section!=='todos'&&sectionLabels[section],...selectedBrands,priceLow>0&&'A partir de '+money(priceLow),priceHigh!==null&&'Até '+money(priceHigh)].filter(Boolean).join(' · ');
+ renderPagination();keepCatalogPosition(preserveY);
+ }catch(e){if(requestId!==catalogRequestId)return;grid.innerHTML='<p>Não foi possível carregar os produtos. Tente novamente em instantes.</p>';$('#resultCount').textContent='Catálogo indisponível';console.warn(e)}finally{if(requestId===catalogRequestId)grid.classList.remove('catalog-changing')}
 }
+
 function renderPagination(){let nav=$('#catalogPagination');if(!nav){nav=document.createElement('nav');nav.id='catalogPagination';nav.className='catalog-pages';nav.setAttribute('aria-label','Páginas do catálogo');$('#products').after(nav)}const count=Math.ceil(total/24);nav.hidden=count<2;nav.innerHTML=`<button data-page="${page-1}" ${page===1?'disabled':''}>← Anterior</button><span>${page} / ${count||1}</span><button data-page="${page+1}" ${page>=count?'disabled':''}>Próxima →</button>`}
 function storage(){try{localStorage.setItem('mahach-bag',JSON.stringify(bag))}catch{}renderBag()}
 function renderBag(){const container=$('#bagItems');if(!container)return;let count=0,totalValue=0;container.innerHTML=Object.entries(bag).map(([id,qty])=>{const p=productsById.get(id);if(!p)return '';count+=qty;totalValue+=p.price*qty;return `<div class="bag-item"><img src="${esc(img(p))}" alt=""><div><h3>${esc(p.name)}</h3><small>${money(p.price)}</small><div class="quantity"><button data-qty="${esc(id)}" data-step="-1" aria-label="Diminuir ${esc(p.name)}">−</button><span>${qty}</span><button data-qty="${esc(id)}" data-step="1" aria-label="Aumentar ${esc(p.name)}">+</button></div></div><button class="remove-item" data-remove="${esc(id)}" aria-label="Remover">×</button></div>`}).join('')||'<p class="empty-bag">Sua próxima essência<br>ainda está por aqui.</p>';
@@ -153,11 +144,11 @@ async function detail(id,trigger){const requestId=++detailRequestId;let p=produc
  $('#productDialog .product-dialog-header [data-close]')?.focus({preventScroll:true});
 }
 function add(id){const p=productsById.get(id);if(!p)return;if(p.stock!==null&&(bag[id]||0)>=p.stock)return toast('Quantidade indisponível no estoque');bag[id]=Math.min(20,(bag[id]||0)+1);storage();closeDialog($('#productDialog'));toast('Adicionado à sua sacola!')}
-async function init(){try{const out=await request('/api/meta'+($('#products')?'?category='+encodeURIComponent(current):''));categories=out.categories;brands=out.brands;category=categories.some(c=>c.id===current)?current:'todos';renderCategories();renderFilters()}catch(e){toast('Não foi possível conectar ao catálogo. Inicie o servidor.')}
+async function init(){try{const out=await request('/api/meta'+($('#products')?'?category='+encodeURIComponent(current):''));categories=out.categories;brands=out.brands;priceCeiling=Math.max(1000,Number(out.priceMax)||6000);category=categories.some(c=>c.id===current)?current:'todos';renderCategories();renderFilters()}catch(e){toast('Não foi possível conectar ao catálogo. Inicie o servidor.')}
  if($('#products')){
  const searchInput=$('#search');
  search=catalogParams.get('q')?.trim().slice(0,100)||'';searchInput.value=search;
- brand=catalogParams.get('marca')||'';renderBrands();
+ brand=[...selectedBrands][0]||'';renderBrands();renderPrice();
  searchInput.addEventListener('input',e=>{
   clearTimeout(searchTimer);
   // Um resultado de busca antiga não pode sobrescrever o novo termo digitado.
@@ -166,13 +157,13 @@ async function init(){try{const out=await request('/api/meta'+($('#products')?'?
   searchTimer=setTimeout(()=>{
    const y=holdCatalogPosition();search=value;page=1;
    // A pesquisa por nome é global: categorias e marcas anteriores não escondem resultados.
-   if(search){category='todos';brand='';brandExpanded=false;$('#brandSearch').value='';renderCategories();renderBrands();refreshCatalogMeta().catch(()=>{});}
+   if(search){category='todos';brand='';selectedBrands.clear();section='todos';brandExpanded=false;$('#brandSearch').value='';renderCategories();renderBrands();refreshCatalogMeta().catch(()=>{});}
    catalogUrl();loadProducts({preserveY:y});
   },240);
  });
  $('#sort').onchange=e=>{clearTimeout(searchTimer);const y=holdCatalogPosition();sort=e.target.value;page=1;loadProducts({preserveY:y})};
- $('#resetFilters').onclick=()=>{clearTimeout(searchTimer);const y=holdCatalogPosition();searchInput.value='';search='';brand='';category='todos';page=1;if($('#brandSearch'))$('#brandSearch').value='';brandExpanded=false;renderCategories();renderBrands();refreshCatalogMeta().catch(()=>{});catalogUrl();loadProducts({preserveY:y})};
- window.addEventListener('popstate',()=>{clearTimeout(searchTimer);const u=new URLSearchParams(location.search);const next=u.get('categoria')||(u.has('q')?'todos':document.body.dataset.category||'todos');category=categories.some(c=>c.id===next)?next:'todos';search=u.get('q')||'';brand=u.get('marca')||'';searchInput.value=search;page=1;renderCategories();renderBrands();refreshCatalogMeta().catch(()=>{});loadProducts({preserveY:holdCatalogPosition()})});
+ $('#resetFilters').onclick=clearCatalogFilters;
+ window.addEventListener('popstate',()=>{clearTimeout(searchTimer);const u=new URLSearchParams(location.search);category=u.get('categoria')||document.body.dataset.category||'todos';search=u.get('q')||'';section=Object.hasOwn(sectionLabels,u.get('section'))?u.get('section'):'todos';selectedBrands.clear();u.getAll('marca').forEach(x=>selectedBrands.add(x));brand=[...selectedBrands][0]||'';priceLow=Number(u.get('priceMin'))||0;priceHigh=u.has('priceMax')?Number(u.get('priceMax')):null;searchInput.value=search;page=1;renderCategories();renderBrands();renderPrice();refreshCatalogMeta().catch(()=>{});loadProducts({preserveY:holdCatalogPosition()})});
  const fs=$('#filterForm');fs.addEventListener('submit',e=>e.preventDefault());
  const media=matchMedia('(min-width: 901px)');const place=()=>{(media.matches?$('#desktopFilterSlot'):$('#mobileFilterSlot')).appendChild(fs);if(media.matches&&$('#filterDialog').open)closeDialog($('#filterDialog'))};place();media.addEventListener('change',place);
  $('#openFilters').onclick=e=>openDialog($('#filterDialog'),e.currentTarget);
@@ -184,10 +175,14 @@ async function init(){try{const out=await request('/api/meta'+($('#products')?'?
  }
  await loadFeatured();
  await restoreBag();
- $$('a[href^="https://wa.me/5511995209827"]').forEach(a=>{if(!a.search)a.href=wa('Olá, LA COUR! Gostaria de mais informações sobre os produtos e a loja.')});
+ $$('a[href^="https://wa.me/5511940856397"]').forEach(a=>{if(!a.search)a.href=wa('Olá, LA COUR! Gostaria de mais informações sobre os produtos e a loja.')});
  if($('#year'))$('#year').textContent=new Date().getFullYear();
 }
 document.addEventListener('click',e=>{
+ const sectionChoice=e.target.closest('[data-section]');if(sectionChoice){e.preventDefault();selectSection(sectionChoice.dataset.section);return}
+ const quick=e.target.closest('[data-quick-add]');if(quick){e.preventDefault();quickAdd(quick.dataset.quickAdd);return}
+ const favorite=e.target.closest('[data-favorite]');if(favorite){const id=favorite.dataset.favorite;if(favorites.has(id))favorites.delete(id);else if(favorites.size<300)favorites.add(id);favorite.setAttribute('aria-pressed',String(favorites.has(id)));try{localStorage.setItem('lacour-favorites',JSON.stringify([...favorites]))}catch{}return}
+
  const categoryLink=e.target.closest('a[data-catalog-category]');
  if(categoryLink&&$('#products')){e.preventDefault();changeCategory(categoryLink.dataset.catalogCategory);return}
  const d=e.target.closest('[data-detail]');if(d){e.preventDefault();return detail(d.dataset.detail,d)}

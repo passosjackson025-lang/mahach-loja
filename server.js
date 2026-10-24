@@ -11,13 +11,15 @@ const commerce=require('./commerce-flows');
 const {savePhoto,imageStorageStatus}=require('./image-storage');
 const ROOT=__dirname, PRIVATE=path.join(ROOT,'private');
 const MAX_BODY=32*1024, CATEGORIES=[['perfumes','Perfumaria','Fragrâncias para todos os estilos'],['corpo','Corpo & cuidado','Seu ritual diário de autocuidado'],['beleza','Beleza essencial','O cuidado em cada detalhe']];
-const DEFAULT_WHATSAPP='5511995209827';
+const {SUPPORT_PHONE:DEFAULT_WHATSAPP,SUPPORT_EMAIL,applySupportContactUpdate}=require('./support-contact');
+const {applyCatalogFilters}=require('./catalog-filters');
 // Não usar SQLite na Render. A chave local é carregada a partir de private/settings.key
 // ou da variável MAHACH_SETTINGS_KEY (recomendada para Render).
 let settings;
 const ready=(async()=>{
  await bootstrap();
  settings=await makeSettingsPg(db,path.join(PRIVATE,'settings.key'));
+ await applySupportContactUpdate(db,settings);
 })();
 function normalizeCatalogQuery(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
 const conf=(name)=>settings.get(name);
@@ -64,7 +66,7 @@ async function staticFile(req,res,url){
  if(pathname.endsWith('/'))pathname+='index.html';
  if(pathname==='/admin/painel.html'&&!await session(req)){res.writeHead(302,{Location:'/admin'});return res.end()}
  // Bloquear arquivos de configuração, fontes de dados e banco de dados.
- if(!/^\/(?:index\.html|sobre\.html|app\.js|data\.js|scene\.js|polish\.js|styles\.css|pix-checkout\.css|catalogo\.js|checkout\.js|finalizado\.html|finalizado\.js|acompanhar\.html|privacidade\.html|tracking\.js|admin\/(?:login\.html|painel\.html|admin\.js|admin\.css|admin-pg-status\.css)|produtos\/(?:index\.html|perfumaria-arabe\/index\.html|corpo-e-cuidado\/index\.html|beleza-essencial\/index\.html)|assets\/[\w./-]+)$/.test(pathname)||pathname.includes('..'))return problem(res,404,'Não encontrado');
+ if(!/^\/(?:index\.html|sobre\.html|contato\.html|app\.js|data\.js|scene\.js|polish\.js|styles\.css|pix-checkout\.css|catalogo\.js|checkout\.js|finalizado\.html|finalizado\.js|acompanhar\.html|privacidade\.html|tracking\.js|admin\/(?:login\.html|painel\.html|admin\.js|admin\.css|admin-pg-status\.css)|produtos\/(?:index\.html|perfumaria-arabe\/index\.html|corpo-e-cuidado\/index\.html|beleza-essencial\/index\.html)|assets\/[\w./-]+)$/.test(pathname)||pathname.includes('..'))return problem(res,404,'Não encontrado');
  const file=path.join(ROOT,pathname);if(!file.startsWith(ROOT+path.sep))return problem(res,404,'Não encontrado');
  let st;try{const real=fs.realpathSync(file);if(!real.startsWith(ROOT+path.sep))throw 0;st=fs.statSync(real);if(!st.isFile())throw 0}catch{return problem(res,404,'Não encontrado')}
  const ext=path.extname(file);if(!MIME[ext])return problem(res,404,'Não encontrado');
@@ -109,7 +111,7 @@ async function shippingQuote(payload){
  if(items.some(({p})=>![p.width,p.height,p.length,p.weight].every(n=>Number.isFinite(Number(n))&&Number(n)>0)))throw Object.assign(new Error('Para calcular frete, cadastre peso e dimensoes de todos os produtos da sacola.'),{status:422});
  const products=items.map(({p,qty})=>({id:p.id,width:Number(p.width),height:Number(p.height),length:Number(p.length),weight:Number(p.weight),insurance_value:p.price,quantity:qty}));
  const api=conf('MELHOR_ENVIO_SANDBOX')==='true'?'https://sandbox.melhorenvio.com.br':'https://melhorenvio.com.br';
- const r=await fetch(api+'/api/v2/me/shipment/calculate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Accept':'application/json','User-Agent':'LA COUR ('+(conf('SHIPPING_CONTACT_EMAIL')||'cooper.machha@gmail.com')+')'},body:JSON.stringify({from:{postal_code:origin},to:{postal_code:cep},products}),signal:AbortSignal.timeout(15000)});
+ const r=await fetch(api+'/api/v2/me/shipment/calculate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Accept':'application/json','User-Agent':'LA COUR ('+(conf('SHIPPING_CONTACT_EMAIL')||'sac.lacour@gmail.com')+')'},body:JSON.stringify({from:{postal_code:origin},to:{postal_code:cep},products}),signal:AbortSignal.timeout(15000)});
  if(!r.ok){
   // Nao gravar respostas de provedor nem tokens nos logs.
   const reason=r.status===401||r.status===403?'Melhor Envio recusou o acesso: confira se o token pertence ao ambiente selecionado (sandbox ou producao).':r.status===422?'Melhor Envio recusou os dados do frete: confira CEP, peso e dimensoes.':'Melhor Envio indisponivel neste momento (HTTP '+r.status+').';
@@ -212,14 +214,18 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const brands=validCategory
     ?(await db.prepare(`SELECT brand,COUNT(*) total FROM products WHERE active=1 AND category=? AND brand<>'' GROUP BY brand ORDER BY total DESC,brand LIMIT 500`).all(validCategory))
     :(await db.prepare(`SELECT brand,COUNT(*) total FROM products WHERE active=1 AND brand<>'' GROUP BY brand ORDER BY total DESC,brand LIMIT 500`).all());
-  return json(res,200,{categories,brands,whatsapp:conf('WHATSAPP')||DEFAULT_WHATSAPP,pickupAddress:conf('SHOP_ADDRESS')||'',onlinePayments:commerce.configured(conf)},{'Cache-Control':'no-store'});
+  const priceStats=await db.prepare('SELECT MAX(price) max_price FROM products WHERE active=1').get();
+  const priceMax=Math.max(1000,Math.ceil(Number(priceStats?.max_price||6000)/100)*100);
+  return json(res,200,{categories,brands,priceMax,supportEmail:conf('ADMIN_EMAIL')||SUPPORT_EMAIL,whatsapp:conf('WHATSAPP')||DEFAULT_WHATSAPP,pickupAddress:conf('SHOP_ADDRESS')||'',onlinePayments:commerce.configured(conf)},{'Cache-Control':'no-store'});
  }
  if(route==='/api/products'&&method==='GET'){
  if(!rate(req,'search',180))return problem(res,429,'Muitas buscas. Tente novamente.');
  const page=Math.min(500,Math.max(1,Number(u.searchParams.get('page'))||1)),limit=Math.min(48,Math.max(1,Number(u.searchParams.get('limit'))||24));
  const category=str(u.searchParams.get('category'),64),brand=str(u.searchParams.get('brand'),100),family=str(u.searchParams.get('family'),85),q=normalizeCatalogQuery(str(u.searchParams.get('q'),100));
  const where=['active=1'],args=[];
- if(category&&category!=='todos'){where.push('category=?');args.push(category)}if(brand){where.push('brand=?');args.push(brand)}if(family){where.push('family=?');args.push(family)}
+ const selectedBrands=[...new Set(u.searchParams.getAll('brand').map(x=>str(x,100)).filter(Boolean))].slice(0,30);
+ applyCatalogFilters(u.searchParams,where,args);
+ if(category&&category!=='todos'){where.push('category=?');args.push(category)}if(selectedBrands.length){where.push('brand IN ('+selectedBrands.map(()=>'?').join(',')+')');args.push(...selectedBrands)}if(family){where.push('family=?');args.push(family)}
  // Cada palavra deve existir no nome/marca. Nunca filtrar por descrição: ela dava falsos positivos.
  for(const token of q.split(' ').filter(Boolean).slice(0,12)){where.push("REGEXP_REPLACE(TRANSLATE(LOWER(name || ' ' || brand), 'áàâãäåéèêëíìîïóòôõöúùûüçñ', 'aaaaaaeeeeiiiiooooouuuucn'), '[^a-z0-9]+', ' ', 'g') LIKE ?");args.push('%'+token+'%')}
  const c=where.join(' AND '),sort={featured:'LOWER(name)',name:'LOWER(name)','price-asc':'price ASC,name','price-desc':'price DESC,name'}[u.searchParams.get('sort')]||'name COLLATE NOCASE';
@@ -390,7 +396,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    if(!token)return problem(res,400,'Configure o token do Melhor Envio');
    const base=conf('MELHOR_ENVIO_SANDBOX')==='true'?'https://sandbox.melhorenvio.com.br':'https://melhorenvio.com.br';
    // Rota de consulta GET documentada pelo Melhor Envio (sem criar etiquetas).
-   const response=await fetch(base+'/api/v2/me/orders',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'LA COUR ('+(conf('SHIPPING_CONTACT_EMAIL')||'cooper.machha@gmail.com')+')'},signal:AbortSignal.timeout(10000)});
+   const response=await fetch(base+'/api/v2/me/orders',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'LA COUR ('+(conf('SHIPPING_CONTACT_EMAIL')||'sac.lacour@gmail.com')+')'},signal:AbortSignal.timeout(10000)});
    if(response.status===401)return problem(res,502,'Melhor Envio recusou este token (HTTP 401). Confira validade, ambiente e permissoes no Melhor Envio.');
    if(response.status===403)return problem(res,502,'Melhor Envio bloqueou ou negou a consulta de etiquetas (HTTP 403). Verifique as permissoes do token; teste inconclusivo.');
    if(!response.ok)return problem(res,502,'Melhor Envio respondeu HTTP '+response.status+' ao consultar etiquetas.');

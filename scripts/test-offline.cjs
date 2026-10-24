@@ -51,6 +51,7 @@ async function main(){
   r=await fetch(base+'/api/admin/stats');assert.equal(r.status,401);
   r=await fetch(base+'/private/mahach.sqlite');assert.equal(r.status,404);
   r=await fetch(base+'/finalizado.html');assert.equal(r.status,200);
+  r=await fetch(base+'/contato.html');assert.equal(r.status,200);assert.ok((await r.text()).includes('sac.lacour@gmail.com'));
   r=await fetch(base+'/sobre.html');assert.equal(r.status,200);assert.ok((await r.text()).includes('storyTitle'));
   r=await fetch(base+'/assets/lacour-experience.css');assert.equal(r.status,200);assert.ok(r.headers.get('content-type').includes('text/css'));
   r=await fetch(base+'/api/orders',{method:'POST',headers:{'content-type':'application/json',Origin:base},body:'{}'});assert.equal(r.status,503);
