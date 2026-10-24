@@ -34,3 +34,13 @@ Use Node.js 22.13 ou superior. Instale as dependências com `npm ci` e execute c
 Fotos dos produtos: fontes registradas em `assets/product-photo-sources.json`, obtidas da Lattafa. Imagens geradas apenas para a campanha visual, sem substituir as fotos reais dos produtos.
 
 Banner: `assets/la-cour-hero.webp`; versão vertical: `assets/la-cour-hero-mobile.webp`. Criado com a ferramenta integrada de geração de imagens. Direção usada: fotografia editorial de um frasco âmbar LA COUR entre madeira escura de oud e flores brancas, luz dourada, fundo creme com espaço livre à esquerda, sem interface, testemunhos ou outras marcas. A composição de campanha é ilustrativa e não identifica um produto à venda.
+
+## Experiência visual — atualização 2
+
+A imagem principal da home foi mantida e agora começa atrás do cabeçalho. A navegação é fixa e transparente no topo; após a rolagem recebe fundo translúcido com desfoque, reflexos e bordas suaves. O rodapé é preto.
+
+A página `/sobre.html` apresenta uma narrativa de marca criada para a LA COUR, sem inventar datas, nomes de fundadores ou números de vendas. Cabeçalho, menu móvel e rodapé apontam para essa página.
+
+O catálogo mantém a grade, filtros e pesquisa existentes. Apenas o cabeçalho e o banner foram alterados; a imagem nova segue o creme, o âmbar e as flores da home, sem galhos. As novas imagens de campanha são `assets/la-cour-collection.webp` e `assets/la-cour-story.webp`. As flores transparentes de `assets/la-cour-flowers.webp` se sobrepõem às bordas das fotos em posições limitadas e sem receber cliques. Todas foram criadas pela ferramenta integrada de imagens, usando a campanha original como referência de cor, iluminação e formato das flores.
+
+As animações respeitam `prefers-reduced-motion`. O conteúdo entra de baixo ao descer e de cima ao subir, com movimento discreto nas imagens e flores. O cabeçalho ganha estados próprios em cada direção. As animações não substituem a rolagem nativa.

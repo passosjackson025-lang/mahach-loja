@@ -1,0 +1,169 @@
+/* LA COUR — immersive headers and motion, preserving the existing shop layout. */
+body[data-page] .site-header{position:fixed;inset:0 0 auto;z-index:40;width:auto;min-height:100px;margin:0;padding:20px 6%;background:transparent;border:1px solid transparent;border-radius:0;color:var(--ink);box-shadow:none;transition:background .45s ease,backdrop-filter .45s ease,margin .45s ease,padding .45s ease,min-height .45s ease,border-radius .45s ease,border-color .45s ease,box-shadow .45s ease,transform .45s ease}
+body[data-page] .site-header::before{content:'';position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:linear-gradient(130deg,#fff8,transparent 36%,#fff2 75%,#fff5);opacity:0;transition:opacity .45s}
+body[data-page] .site-header.is-scrolled{margin:12px 3%;padding:13px 3%;min-height:76px;border-color:#ffffffa6;border-radius:20px;background:#f3eee6c9;-webkit-backdrop-filter:blur(22px) saturate(1.45);backdrop-filter:blur(22px) saturate(1.45);box-shadow:0 8px 32px #241a1514,inset 0 1px 0 #ffffffb3;color:#231f1a}
+body[data-page] .site-header.is-scrolled::before{opacity:.7}
+body[data-page] .site-header.scroll-down{transform:translateY(-2px)}
+body[data-page] .site-header.scroll-up{transform:translateY(0);background:#f6f2e9e3;box-shadow:0 12px 38px #241a151c,inset 0 1px 0 #fff}
+.site-header>a,.site-header>nav,.site-header>div,.site-header>button{position:relative;z-index:1}
+.site-header .brand,.site-header svg{transition:color .35s ease,transform .35s ease}
+body[data-page=home] .site-header:not(.is-scrolled) .header-actions{color:#f9f3e8;filter:drop-shadow(0 1px 3px #241a1580)}
+body[data-page=home] .opening{position:relative;isolation:isolate;overflow:visible;margin:0;min-height:780px;height:100svh;max-height:1060px;aspect-ratio:auto;background:#f3eee6}
+body[data-page=home] .opening-art{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;z-index:-2}
+body[data-page=home] .opening-art img{width:100%;height:100%;object-fit:cover;object-position:50% 50%;transform:translate3d(0,var(--hero-shift,0px),0) scale(1.025);transform-origin:50% 60%;will-change:transform}
+body[data-page=home] .opening:after{display:block;background:linear-gradient(90deg,#f3eee610 10%,transparent 66%);inset:0;z-index:-1;pointer-events:none}
+body[data-page=home] .hero-copy{position:absolute;left:8%;top:clamp(158px,21%,225px);width:46%;max-width:680px;padding:0;background:none;z-index:2}
+body[data-page=home] .hero-copy h1{font-size:clamp(50px,5.5vw,88px);line-height:1.01}
+.hero-aside{bottom:11%;right:4%;z-index:2}
+.floating-flower{position:absolute;pointer-events:none;z-index:5;transform:translate3d(0,var(--petal-shift,0px),0);will-change:transform;user-select:none}
+.floating-flower img{display:block;width:100%;height:auto;object-fit:contain;filter:drop-shadow(0 9px 10px #4b301329);animation:petal-drift 8s ease-in-out infinite alternate}
+.hero-flower{width:clamp(170px,18vw,285px);bottom:-39px;right:6%}
+.lacour-about{position:relative;isolation:isolate;overflow:visible}
+.lacour-about .about-art{overflow:hidden}
+.lacour-about .about-art img{object-position:50% 62%}
+.about-flower{width:clamp(140px,16vw,235px);left:calc(46% - 110px);top:-42px}
+.about-copy,.about-values{position:relative;z-index:2}
+.lacour-services{position:relative;z-index:1}
+@keyframes petal-drift{from{transform:translate3d(0,0,0) rotate(-4deg)}to{transform:translate3d(0,-9px,0) rotate(2deg)}}
+/* The catalog keeps its grid, search, categories and filters; only its banner changes. */
+body[data-page=catalog] .shop-banner{position:relative;min-height:445px;max-height:none;padding:150px 0 55px;margin:0;isolation:isolate;background:var(--paper);color:var(--ink);overflow:hidden}
+body[data-page=catalog] .shop-banner-art{inset:0;width:100%;height:100%;opacity:1;filter:none;object-fit:cover;object-position:50% 50%;transform:none}
+body[data-page=catalog] .shop-banner:after{background:linear-gradient(90deg,#f3eee640 0%,#f3eee615 46%,transparent 66%);z-index:-1}
+body[data-page=catalog] .shop-banner-copy{padding:0;position:relative;z-index:2}
+body[data-page=catalog] .catalog-eyebrow{color:#594a3a!important;font:10px/1.5 var(--sans);letter-spacing:.25em;margin:0 0 17px;max-width:none}
+body[data-page=catalog] .breadcrumb{font-size:10px;margin-bottom:15px;max-width:52%;opacity:.8}
+body[data-page=catalog] .shop-banner-copy h1{font:400 clamp(44px,5.8vw,84px)/1.04 var(--serif);letter-spacing:-.045em;color:var(--ink);max-width:52%;text-shadow:none}
+body[data-page=catalog] .shop-banner-copy>p:not(.catalog-eyebrow){font-size:13px;line-height:1.7;max-width:42%;margin-top:17px;color:#63503f;text-shadow:none}
+/* A separate About page. */
+.story-hero{position:relative;isolation:isolate;min-height:760px;height:92svh;max-height:980px;overflow:visible;background:#f3eee6}
+.story-hero-art{position:absolute;inset:0 0 0 47%;z-index:-2;overflow:hidden}
+.story-hero-art img{object-fit:cover;object-position:50% 66%}
+.story-hero:after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(90deg,#f3eee6 35%,#f3eee6bd 47%,#f3eee600 64%)}
+.story-hero-copy{padding-top:clamp(160px,20vh,230px)}
+.story-hero-copy h1{font:400 clamp(48px,5.1vw,80px)/1.06 var(--serif);letter-spacing:-.05em;margin-top:25px;max-width:50%}
+.story-hero-copy h1 em{color:var(--brown)}
+.story-hero-copy>p:not(.eyebrow){font:14px/1.85 var(--sans);margin-top:25px;max-width:34%;color:#695441}
+.story-hero-copy .lacour-button{margin-top:29px}
+.story-flower{width:240px;bottom:-37px;left:40%}
+.story-intro{padding-block:100px 90px;scroll-margin-top:100px}
+.story-intro>.eyebrow{margin-bottom:30px}
+.story-intro-grid{display:grid;grid-template-columns:1fr 1.1fr;gap:10%;align-items:start}
+.story-intro h2{font:400 clamp(36px,4vw,59px)/1.13 var(--serif);letter-spacing:-.045em}
+.story-intro h2 em{color:var(--brown)}
+.story-intro-grid>div p{font:14px/1.95 var(--sans);color:#685544;margin-bottom:20px}
+.story-band{padding:70px 0;background:#e8dfd1;text-align:center;border-block:1px solid #d1c1a7}
+.story-band .eyebrow{margin-bottom:28px}
+.story-quote{font:400 clamp(38px,5vw,75px)/1.13 var(--serif);letter-spacing:-.045em}
+.story-quote em{color:var(--brown)}
+.story-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:45px;padding-block:85px}
+.story-value{border-top:1px solid #bcab91;padding-top:25px}
+.story-value>span{font:15px/1.4 var(--serif);color:var(--brown)}
+.story-value h2{font:400 31px/1.15 var(--serif);letter-spacing:-.035em;margin:24px 0 18px}
+.story-value p{font:13px/1.85 var(--sans);color:#6d5947;max-width:300px}
+/* True black footer, warm white type and quiet gold details. */
+footer{position:relative;background:#090909;color:#eee6d9}
+footer .footer-top,footer .company-details,footer .footer-bottom{border-color:#ffffff24}
+footer .footer-logo{color:#f7f0e5}
+footer .footer-label{color:#c9ae80}
+footer .company-details p,footer .company-details a{color:#d0c6b8}
+footer .footer-bottom{color:#b5a99a}
+footer .footer-links a{color:#e8dfd1}
+footer .footer-links a:hover,footer .company-details a:hover{color:#e1c493}
+footer .footer-logo:hover{color:#e8cfa2}
+/* Re-entering content rises on downward scroll and settles from above on upward scroll. */
+@media(prefers-reduced-motion:no-preference){
+ .motion-item{opacity:0;transform:translate3d(0,27px,0) scale(.992);transition:opacity .7s ease,transform .85s cubic-bezier(.2,.65,.25,1);transition-delay:var(--motion-delay,0ms);will-change:opacity,transform}
+ .motion-item[data-enter-from=up]{transform:translate3d(0,-19px,0) scale(1.006)}
+ .motion-item.is-visible{opacity:1;transform:translate3d(0,0,0) scale(1)}
+ .featured-image img,.product-photo img{transition:transform .6s cubic-bezier(.2,.65,.25,1)}
+ .featured-image:hover img{transform:scale(1.055)}
+}
+@media(min-width:1600px){body[data-page=home] .hero-copy{left:max(8%,calc((100vw - 1450px)/2))}}
+@media(max-width:1100px){
+ body[data-page] .site-header{padding-inline:5%}
+ body[data-page=home] .hero-copy{left:6%;width:51%;top:185px}
+ body[data-page=home] .hero-copy h1{font-size:clamp(50px,6.1vw,66px)}
+ .about-flower{left:calc(43% - 75px);width:180px}
+ .story-hero-copy h1{font-size:58px;max-width:54%}
+ .story-hero-copy>p:not(.eyebrow){max-width:39%}
+}
+@media(max-width:900px){
+ body[data-page] .site-header{min-height:86px;padding-block:17px}
+ body[data-page] .site-header.is-scrolled{min-height:72px;margin:10px 3%;padding:10px 3%;border-radius:17px}
+ body[data-page=home] .hero-copy{top:160px;width:58%}
+ body[data-page=home] .opening{min-height:750px;max-height:950px}
+ body[data-page=home] .hero-copy h1{font-size:56px}
+ .hero-flower{width:190px;right:4%;bottom:-30px}
+ .about-flower{left:calc(44% - 85px);top:-25px;width:165px}
+ .story-hero{min-height:720px;height:85svh}
+ .story-hero-copy h1{font-size:49px}
+ .story-values{gap:25px}
+ .story-value h2{font-size:27px}
+ body[data-page=catalog] .shop-banner{min-height:400px;padding-top:130px}
+}
+@media(max-width:700px){
+ body[data-page] .site-header{min-height:80px;padding:15px 4%;gap:8px}
+ body[data-page] .site-header.is-scrolled{min-height:67px;margin:8px 3%;padding:9px 3%;border-radius:15px}
+ body[data-page] .site-header .brand{font-size:24px;letter-spacing:.13em}
+ body[data-page=home] .site-header:not(.is-scrolled) .header-actions{color:#231f1a;filter:none}
+ body[data-page=home] .opening{display:block;min-height:790px;height:100svh;max-height:930px;padding:0}
+ body[data-page=home] .opening-art{position:absolute;inset:0;width:100%;height:100%;order:initial;z-index:-2}
+ body[data-page=home] .opening-art img{object-fit:cover;object-position:50% 62%;transform:translate3d(0,var(--hero-shift,0px),0) scale(1.03)}
+ body[data-page=home] .opening:after{display:block;background:linear-gradient(180deg,#f3eee6f9 0%,#f3eee6f2 38%,#f3eee6b3 48%,#f3eee600 68%);inset:0}
+ body[data-page=home] .hero-copy{position:absolute;left:7%;top:116px;width:86%;padding:0;max-width:none;background:none}
+ body[data-page=home] .hero-copy h1{font-size:clamp(39px,10.7vw,60px);line-height:1.03;letter-spacing:-.055em;text-wrap:nowrap}
+ .hero-description{margin-top:19px;font-size:13px;line-height:1.75}
+ .hero-eyebrow{font-size:9px;margin-bottom:18px}
+ .hero-copy .lacour-button{margin-top:20px}
+ .hero-flower{width:148px;right:2%;bottom:-24px}
+ .hero-aside{display:none}
+ .about-flower{top:245px;left:auto;right:1%;width:145px}
+ .lacour-about .about-art img{object-position:50% 64%}
+ .about-copy{padding-top:45px}
+ body[data-page=catalog] .shop-banner{min-height:435px;padding:119px 0 45px}
+ body[data-page=catalog] .shop-banner-art{object-position:65% 50%}
+ body[data-page=catalog] .shop-banner:after{background:linear-gradient(90deg,#f3eee6e8,#f3eee6b0 49%,#f3eee615)}
+ body[data-page=catalog] .shop-banner-copy{padding:0!important}
+ body[data-page=catalog] .catalog-eyebrow{font-size:9px;margin-bottom:18px;max-width:75%}
+ body[data-page=catalog] .shop-banner-copy h1{font-size:clamp(36px,10vw,52px);max-width:76%;line-height:1.09}
+ body[data-page=catalog] .shop-banner-copy>p:not(.catalog-eyebrow){font-size:12px;max-width:60%;margin-top:15px}
+ body[data-page=catalog] .breadcrumb{max-width:75%;font-size:9px;gap:5px;margin-bottom:14px}
+ .story-hero{min-height:860px;height:auto;max-height:none;padding-bottom:390px}
+ .story-hero-art{inset:360px 0 0;z-index:-2}
+ .story-hero-art img{object-position:50% 72%}
+ .story-hero:after{background:linear-gradient(180deg,#f3eee6 35%,#f3eee6d9 43%,#f3eee600 58%)}
+ .story-hero-copy{padding-top:117px;width:86%}
+ .story-hero-copy h1{font-size:clamp(39px,10.5vw,60px);max-width:100%;margin-top:21px;line-height:1.07}
+ .story-hero-copy>p:not(.eyebrow){max-width:100%;font-size:13px;margin-top:20px;line-height:1.8}
+ .story-hero-copy .lacour-button{margin-top:22px}
+ .story-flower{width:165px;bottom:-25px;left:auto;right:3%}
+ .story-intro{padding-block:60px 45px;scroll-margin-top:90px}
+ .story-intro-grid{grid-template-columns:1fr;gap:25px}
+ .story-intro h2{font-size:38px}
+ .story-intro-grid>div p{font-size:13px;line-height:1.9}
+ .story-band{padding-block:47px}
+ .story-quote{font-size:clamp(32px,9vw,45px)}
+ .story-values{grid-template-columns:1fr;gap:34px;padding-block:50px}
+ .story-value h2{font-size:31px;margin-block:17px 14px}
+ .story-value p{max-width:none}
+ .footer-top{padding-top:48px}
+}
+@media(max-width:360px){
+ body[data-page] .site-header .brand{font-size:21px}
+ body[data-page=home] .hero-copy{top:108px}
+ body[data-page=home] .opening{min-height:760px}
+ .hero-description{max-width:95%;font-size:12px}
+ .hero-flower{width:125px}
+ .story-hero-copy h1{font-size:38px}
+ .story-hero-copy>p:not(.eyebrow){font-size:12px}
+ .story-intro h2{font-size:33px}
+}
+@media(prefers-reduced-motion:reduce){
+ body[data-page] .site-header,.site-header:before,.floating-flower,.floating-flower img,.motion-item,.opening-art img{animation:none!important;transition:none!important;will-change:auto}
+ .floating-flower,.floating-flower img,.opening-art img,.motion-item{transform:none!important}
+ .motion-item{opacity:1!important}
+}
+/* Keep botanical layers in front of photo edges, clear of text and controls. */
+body[data-page=home] .opening{z-index:2}
+@media(min-width:701px){.about-flower{left:calc(46% - 165px);width:190px;top:-40px}.story-hero:after{background:linear-gradient(90deg,#f3eee6 40%,#f3eee6f2 48%,#f3eee680 56%,transparent 70%)}}
+@media(min-width:701px) and (max-width:1100px){.about-flower{left:calc(43% - 145px);width:170px}}

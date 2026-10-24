@@ -64,7 +64,7 @@ async function staticFile(req,res,url){
  if(pathname.endsWith('/'))pathname+='index.html';
  if(pathname==='/admin/painel.html'&&!await session(req)){res.writeHead(302,{Location:'/admin'});return res.end()}
  // Bloquear arquivos de configuração, fontes de dados e banco de dados.
- if(!/^\/(?:index\.html|app\.js|data\.js|scene\.js|polish\.js|styles\.css|pix-checkout\.css|catalogo\.js|checkout\.js|finalizado\.html|finalizado\.js|acompanhar\.html|privacidade\.html|tracking\.js|admin\/(?:login\.html|painel\.html|admin\.js|admin\.css|admin-pg-status\.css)|produtos\/(?:index\.html|perfumaria-arabe\/index\.html|corpo-e-cuidado\/index\.html|beleza-essencial\/index\.html)|assets\/[\w./-]+)$/.test(pathname)||pathname.includes('..'))return problem(res,404,'Não encontrado');
+ if(!/^\/(?:index\.html|sobre\.html|app\.js|data\.js|scene\.js|polish\.js|styles\.css|pix-checkout\.css|catalogo\.js|checkout\.js|finalizado\.html|finalizado\.js|acompanhar\.html|privacidade\.html|tracking\.js|admin\/(?:login\.html|painel\.html|admin\.js|admin\.css|admin-pg-status\.css)|produtos\/(?:index\.html|perfumaria-arabe\/index\.html|corpo-e-cuidado\/index\.html|beleza-essencial\/index\.html)|assets\/[\w./-]+)$/.test(pathname)||pathname.includes('..'))return problem(res,404,'Não encontrado');
  const file=path.join(ROOT,pathname);if(!file.startsWith(ROOT+path.sep))return problem(res,404,'Não encontrado');
  let st;try{const real=fs.realpathSync(file);if(!real.startsWith(ROOT+path.sep))throw 0;st=fs.statSync(real);if(!st.isFile())throw 0}catch{return problem(res,404,'Não encontrado')}
  const ext=path.extname(file);if(!MIME[ext])return problem(res,404,'Não encontrado');
