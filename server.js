@@ -25,6 +25,7 @@ const ready=(async()=>{
  await management.updateStoreCategories(db);
  paymentReadiness=await commerce.validateConnection(conf);
  console.info('[Pagamentos LA COUR] '+paymentReadiness.reason);
+ console.info('[Admin LA COUR] writes_'+(process.env.MAHACH_ENABLE_ADMIN_WRITES==='true'?'enabled':'disabled'));
 })();
 function normalizeCatalogQuery(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
 const conf=(name)=>settings.get(name);
