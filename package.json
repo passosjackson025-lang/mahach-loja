@@ -18,7 +18,8 @@
     "test:publicacao": "node scripts/testar-publicacao.cjs",
     "publicacao:check": "node --env-file-if-exists=.env scripts/auditar-publicacao.cjs",
     "fotos:migrar": "node --env-file-if-exists=.env scripts/migrar-fotos-cloudinary.cjs",
-    "test:catalog": "node scripts/test-catalog-filters.cjs"
+    "test:catalog": "node scripts/test-catalog-filters.cjs",
+    "test:management": "node scripts/test-management.cjs"
   },
   "dependencies": {
     "pg": "^8.16.3"

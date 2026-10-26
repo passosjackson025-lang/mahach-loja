@@ -4,17 +4,13 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const FIELDS=Object.freeze({
+ SUPPORT_EMAIL:{label:'E-mail público do SAC e respostas',kind:'email',section:'loja',default:'sac.lacour@gmail.com'},
  WHATSAPP:{label:'WhatsApp de atendimento',kind:'phone',section:'loja'},
  SHOP_ADDRESS:{label:'Endereço para retirada',kind:'text',section:'loja',max:250},
  ORIGIN_CEP:{label:'CEP da loja (origem do frete)',kind:'cep',section:'melhor-envio'},
  SHIPPING_CONTACT_EMAIL:{label:'E-mail operacional do frete',kind:'email',section:'melhor-envio'},
  MELHOR_ENVIO_SANDBOX:{label:'Ambiente de testes (true/false)',kind:'bool',section:'melhor-envio'},
  MELHOR_ENVIO_TOKEN:{label:'Token Melhor Envio',kind:'secret',section:'melhor-envio',max:8192},
- VENDIZAP_ID:{label:'ID Vendizap',kind:'text',section:'vendizap'},
- VENDIZAP_SECRET:{label:'Secret Vendizap',kind:'secret',section:'vendizap'},
- BLING_CLIENT_ID:{label:'Client ID Bling',kind:'text',section:'bling'},
- BLING_CLIENT_SECRET:{label:'Client Secret Bling',kind:'secret',section:'bling'},
- BLING_REDIRECT_URI:{label:'URL de retorno Bling OAuth',kind:'url',section:'bling'},
  MERCADO_PAGO_PUBLIC_KEY:{label:'Chave pública Mercado Pago',kind:'text',section:'mercado-pago'},
  MERCADO_PAGO_ACCESS_TOKEN:{label:'Access Token Mercado Pago',kind:'secret',section:'mercado-pago'},
  MERCADO_PAGO_WEBHOOK_SECRET:{label:'Assinatura secreta do Webhook Mercado Pago',kind:'secret',section:'mercado-pago'},

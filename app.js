@@ -6,6 +6,7 @@ const arrow='<svg class="arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><pat
 const emptyImage='/assets/produto-sem-foto.svg';
 let categories=[],brands=[],bag={},page=1,search='',category='todos',brand='',sort='featured',currentPage=[],productsById=new Map(),total=0,dialogTriggers=new WeakMap(),dialogScrollY=new WeakMap(),toastTimeout;
 const catalogParams=new URLSearchParams(location.search);
+if(catalogParams.get('categoria')==='beleza')catalogParams.set('categoria','corpo');
 const current=catalogParams.get('categoria')||(catalogParams.has('q')?'todos':document.body.dataset.category||'todos');
 function img(p){return p.image||emptyImage}
 window.laCourProductImage=img;
@@ -45,15 +46,17 @@ function renderCategories(){
  const arr=[{id:'todos',name:'Todos os produtos',subtitle:'',total:categories.reduce((n,c)=>n+(c.total||0),0)},...categories];
  $$('[data-category-list]').forEach(container=>{
   const data=container.hasAttribute('data-include-all')?arr:categories;
-  container.innerHTML=data.map(c=>`<a href="/produtos/index.html?categoria=${encodeURIComponent(c.id)}"><span>${esc(cleanLabel(c.name))}</span>${arrow}</a>`).join('');
+  container.innerHTML=data.map(c=>`<a href="${c.id==='todos'?'/produtos/todos/index.html':c.id==='corpo'?'/produtos/corpo-e-cuidado/index.html':'/produtos/index.html?categoria='+encodeURIComponent(c.id)}"><span>${esc(cleanLabel(c.name))}</span>${arrow}</a>`).join('');
  });
- const selected=categories.find(c=>c.id===category),name=category==='perfumes'?'Perfumes':cleanLabel(selected?.name||'Perfumes');
- if($('#mobileCategoryLabel'))$('#mobileCategoryLabel').textContent=sectionLabels[section]||name;
- if($('#catalogTitle')){$('#catalogTitle').textContent=name;$('#catalogSubtitle').textContent=selected?.subtitle||'Essências que transformam o extraordinário em rotina.';$('#breadcrumbCategory').textContent=selected?name:'';$$('.category-crumb').forEach(x=>x.hidden=!selected);document.title=name+' — LA COUR'}
+ const selected=categories.find(c=>c.id===category),name=category==='todos'?'Todos os produtos':category==='perfumes'?'Perfumes':cleanLabel(selected?.name||'Corpo e cuidado');
+ if($('#mobileCategoryLabel'))$('#mobileCategoryLabel').textContent=section==='todos'?name:sectionLabels[section];
+ if($('#catalogTitle')){$('#catalogTitle').textContent=name;$('#catalogSubtitle').textContent=selected?.subtitle||'Perfumes e autocuidado em uma seleção especial.';$('#breadcrumbCategory').textContent=selected?name:'';$$('.category-crumb').forEach(x=>x.hidden=!selected);document.title=name+' — LA COUR'}
  renderSections();
 }
 let brandExpanded=false,catalogRequestId=0,metaRequestId=0,detailRequestId=0,searchTimer;
 function renderSections(){
+ if(category!=='perfumes'){const html=[['todos','Todos os produtos'],['perfumes','Perfumes'],['corpo','Corpo e cuidado']].map(([id,label])=>`<a data-catalog-category="${id}" href="/produtos/todos/index.html?categoria=${id}" aria-current="${category===id?'page':'false'}">${label}</a>`).join('');if($('#perfumeTabs')){$('#perfumeTabs').innerHTML=html;$('#perfumeTabs').setAttribute('aria-label','Departamentos')}if($('#sectionFilters'))$('#sectionFilters').innerHTML=html;return;}
+ if($('#perfumeTabs'))$('#perfumeTabs').setAttribute('aria-label','Tipos de perfume');
  const buttons=Object.entries(sectionLabels).map(([key,label])=>`<button type="button" data-section="${key}" aria-pressed="${section===key}" class="${section===key?'is-active':''}">${esc(label)}</button>`).join('');
  if($('#perfumeTabs'))$('#perfumeTabs').innerHTML=buttons;
  if($('#sectionFilters'))$('#sectionFilters').innerHTML=Object.entries(sectionLabels).map(([key,label])=>`<label class="filter-checkbox"><input type="checkbox" data-section="${key}" ${section===key?'checked':''}><span>${esc(label)}</span></label>`).join('');
@@ -137,7 +140,7 @@ async function detail(id,trigger){const requestId=++detailRequestId;let p=produc
  $('#productDialog .product-dialog-header [data-close]')?.focus({preventScroll:true});
 }
 function add(id){const p=productsById.get(id);if(!p)return;if(p.stock!==null&&(bag[id]||0)>=p.stock)return toast('Quantidade indisponível no estoque');bag[id]=Math.min(20,(bag[id]||0)+1);storage();closeDialog($('#productDialog'));toast('Adicionado à sua sacola!')}
-async function init(){try{const out=await request('/api/meta'+($('#products')?'?category='+encodeURIComponent(current):''));categories=out.categories;brands=out.brands;priceCeiling=Math.max(1000,Number(out.priceMax)||6000);category=categories.some(c=>c.id===current)?current:'todos';renderCategories();renderFilters()}catch(e){toast('Não foi possível conectar ao catálogo. Inicie o servidor.')}
+async function init(){try{const out=await request('/api/meta'+($('#products')?'?category='+encodeURIComponent(current):''));categories=out.categories;brands=out.brands;applyPublicEmail(out.supportEmail);priceCeiling=Math.max(1000,Number(out.priceMax)||6000);category=categories.some(c=>c.id===current)?current:'todos';renderCategories();renderFilters()}catch(e){toast('Não foi possível conectar ao catálogo. Inicie o servidor.')}
  if($('#products')){
  const searchInput=$('#search');
  search=catalogParams.get('q')?.trim().slice(0,100)||'';searchInput.value=search;
@@ -211,3 +214,5 @@ const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;if(!reduce&&
 init();
 
 document.addEventListener('error',e=>{if(e.target.tagName==='IMG'&&e.target.src&&!e.target.src.endsWith('produto-sem-foto.svg'))e.target.src='/assets/produto-sem-foto.svg'},true);
+
+function applyPublicEmail(email){if(typeof email!=='string'||!/^\S+@\S+\.\S+$/.test(email))return;for(const a of document.querySelectorAll('a[href^="mailto:"]')){const old=a.getAttribute('href').slice(7);a.href='mailto:'+email;const walker=document.createTreeWalker(a,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode())if(node.textContent.includes(old))node.textContent=node.textContent.replaceAll(old,email)}}

@@ -44,6 +44,7 @@ class Pool{
 Module._load=function(id,parent,isMain){if(id==='pg')return {Pool,types:{setTypeParser(){}}};return original.call(this,id,parent,isMain)};
 Object.assign(process.env,{DATABASE_URL:'postgresql://test:abc@localhost/mock',MAHACH_SETTINGS_KEY:'00'.repeat(32),MAHACH_ENABLE_CHECKOUT:'true',MAHACH_ENABLE_ADMIN_WRITES:'true',MERCADO_PAGO_ACCESS_TOKEN:'credencial-ficticia-de-teste',MERCADO_PAGO_WEBHOOK_SECRET:'secret-de-teste',PUBLIC_SITE_URL:'https://ma-hach.invalid'});
 const commerce=require('../commerce-flows');
+commerce.validateConnection=async()=>({ready:true,reason:'simulated'});
 commerce.createPreference=async(conf,o,items)=>({preferenceId:'TEST-PREF',checkoutUrl:'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=TEST-PREF'});
 commerce.createPixPayment=async(conf,o,cpf)=>{assert.ok(commerce.validCPF(cpf));return {paymentId:'123456789',qrCode:'PIX-TESTE-NAO-PAGAVEL',qrCodeBase64:'iVBORw0KGgo=',expiresAt:''}};
 commerce.getVerifiedPayment=async()=>({external_reference:order?.id,currency_id:'BRL',transaction_amount:95,status:'approved',id:123456789,payment_method_id:'pix'});

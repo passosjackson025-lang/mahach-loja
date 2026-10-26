@@ -4,6 +4,16 @@ const MP='https://api.mercadopago.com';
 const cents=x=>Math.round(Number(x)*100);
 function httpsSite(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!['localhost','127.0.0.1'].includes(u.hostname)&&!u.search&&!u.hash?u.origin:null}catch{return null}}
 function configured(conf){return !!(conf('MERCADO_PAGO_ACCESS_TOKEN')&&conf('MERCADO_PAGO_WEBHOOK_SECRET')&&httpsSite(conf('PUBLIC_SITE_URL')))}
+async function validateConnection(conf){
+ if(!configured(conf))return {ready:false,reason:'missing_configuration'};
+ try{
+  const response=await fetch(MP+'/users/me',{headers:{Authorization:'Bearer '+conf('MERCADO_PAGO_ACCESS_TOKEN'),Accept:'application/json'},signal:AbortSignal.timeout(12000)});
+  if(!response.ok)return {ready:false,reason:'authentication_http_'+response.status};
+  const account=await response.json();
+  if(!account.id||conf('MERCADO_PAGO_ACCESS_TOKEN').startsWith('TEST-')||account.tags?.includes('test_user'))return {ready:false,reason:'test_account'};
+  return {ready:true,reason:'authenticated'};
+ }catch{return {ready:false,reason:'connection_unavailable'}}
+}
 function htmlesc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function createPreference(conf,order,items,token){
  if(!configured(conf))throw Object.assign(new Error('Mercado Pago indisponível: configure Access Token, URL HTTPS e segredo do Webhook no painel.'),{status:503});
@@ -75,7 +85,7 @@ async function getVerifiedPayment(conf,id){
 }
 async function sendEmail(conf,to,subject,html){
  const api=conf('RESEND_API_KEY'),from=conf('MAIL_FROM');if(!api||!from)return {ok:false,reason:'Serviço de e-mail não configurado'};
- const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+api,'Content-Type':'application/json'},body:JSON.stringify({from,to:[to],subject,html,reply_to:conf('ADMIN_EMAIL')||'sac.lacour@gmail.com'}),signal:AbortSignal.timeout(12000)});
+ const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+api,'Content-Type':'application/json'},body:JSON.stringify({from,to:[to],subject,html,reply_to:conf('SUPPORT_EMAIL')||'sac.lacour@gmail.com'}),signal:AbortSignal.timeout(12000)});
  if(!r.ok)return {ok:false,reason:'Serviço de e-mail respondeu HTTP '+r.status};return {ok:true};
 }
-module.exports={cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};
+module.exports={validateConnection,cents,httpsSite,configured,htmlesc,validCPF,pixDetails,createPixPayment,createPreference,verifyMPWebhook,getVerifiedPayment,sendEmail};

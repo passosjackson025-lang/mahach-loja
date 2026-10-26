@@ -17,19 +17,20 @@ async function makeSettingsPg(db,keyFile){
  async function reload(){
   const rows=await db.prepare('SELECT key,value,encrypted,updated_at FROM site_settings').all();
   const next=new Map();
-  for(const r of rows){if(r.encrypted)unseal(key(false),r.value);next.set(r.key,r)}
+  for(const r of rows){if(!FIELDS[r.key])continue;if(r.encrypted)unseal(key(false),r.value);next.set(r.key,r)}
   stored=next;
  }
  await reload();
  function get(name){
   if(!FIELDS[name])throw Error('Configuração não suportada');
   const row=stored.get(name);
-  return row?(row.encrypted?unseal(key(false),row.value):row.value):String(process.env[name]||'');
+  if(process.env[name])return String(process.env[name]);
+  return row?(row.encrypted?unseal(key(false),row.value):row.value):String(FIELDS[name].default||'');
  }
  function list(){return Object.entries(FIELDS).map(([name,meta])=>{
   const row=stored.get(name),value=get(name);
   return {key:name,label:meta.label,kind:meta.kind,section:meta.section,configured:!!value,
-   source:row?'painel':process.env[name]?'ambiente':'vazio',value:meta.kind==='secret'?'':value,updatedAt:row?.updated_at||null};
+   hasStoredOverride:!!row,source:process.env[name]?'ambiente':row?'painel':'vazio',value:meta.kind==='secret'?'':value,updatedAt:row?.updated_at||null};
  })}
  async function save(changes,clears=[]){
   if(!changes||typeof changes!=='object'||Array.isArray(changes)||!Array.isArray(clears))throw Object.assign(Error('Dados inválidos'),{status:400});
@@ -37,7 +38,7 @@ async function makeSettingsPg(db,keyFile){
   const updates=[];
   for(const [name,raw] of Object.entries(changes)){
    const def=FIELDS[name];if(!def||typeof raw!=='string')throw Object.assign(Error('Campo inválido: '+name),{status:400});
-   const value=raw.trim();if(value.length>(def.max||1500))throw Object.assign(Error('Valor muito longo: '+name),{status:400});
+   const value=raw.trim();if(process.env[name]&&value)throw Object.assign(Error('Este campo é controlado pelo ambiente: '+name),{status:409});if(value.length>(def.max||1500))throw Object.assign(Error('Valor muito longo: '+name),{status:400});
    if(def.kind==='secret'&&!value)continue;
    if(def.kind==='cep'&&value&&!/^\d{8}$/.test(value.replace(/\D/g,'')))throw Object.assign(Error('CEP deve ter oito dígitos'),{status:400});
    if(def.kind==='phone'&&value&&!/^\d{10,15}$/.test(value.replace(/\D/g,'')))throw Object.assign(Error('WhatsApp precisa conter DDI e DDD'),{status:400});

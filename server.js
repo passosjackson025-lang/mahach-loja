@@ -10,9 +10,11 @@ const {makeSettingsPg}=require('./site-settings-pg');
 const commerce=require('./commerce-flows');
 const {savePhoto,imageStorageStatus}=require('./image-storage');
 const ROOT=__dirname, PRIVATE=path.join(ROOT,'private');
-const MAX_BODY=32*1024, CATEGORIES=[['perfumes','Perfumaria','Fragrâncias para todos os estilos'],['corpo','Corpo & cuidado','Seu ritual diário de autocuidado'],['beleza','Beleza essencial','O cuidado em cada detalhe']];
+const MAX_BODY=32*1024, CATEGORIES=[['perfumes','Perfumes','Fragrâncias para todos os estilos'],['corpo','Corpo e cuidado','Seu ritual diário de autocuidado']];
 const {SUPPORT_PHONE:DEFAULT_WHATSAPP,SUPPORT_EMAIL,applySupportContactUpdate}=require('./support-contact');
 const {applyCatalogFilters}=require('./catalog-filters');
+const management=require('./admin-management');
+let paymentReadiness={ready:false,reason:'not_checked'};
 // Não usar SQLite na Render. A chave local é carregada a partir de private/settings.key
 // ou da variável MAHACH_SETTINGS_KEY (recomendada para Render).
 let settings;
@@ -20,6 +22,9 @@ const ready=(async()=>{
  await bootstrap();
  settings=await makeSettingsPg(db,path.join(PRIVATE,'settings.key'));
  await applySupportContactUpdate(db,settings);
+ await management.updateStoreCategories(db);
+ paymentReadiness=await commerce.validateConnection(conf);
+ console.info('[Pagamentos LA COUR] '+paymentReadiness.reason);
 })();
 function normalizeCatalogQuery(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
 const conf=(name)=>settings.get(name);
@@ -39,7 +44,7 @@ async function bodyCsv(req){if(!/^text\/csv(?:;|$)/i.test(req.headers['content-t
 function str(x,max=255){return typeof x==='string'?x.trim().slice(0,max):''}
 function number(x){const n=Number(x);return Number.isFinite(n)?n:NaN}
 async function validProduct(data){
- const p={id:str(data.id,80),name:str(data.name,220),description:str(data.description,10000),category:str(data.category,64),brand:str(data.brand,100),family:str(data.family,85),image:secureUrl(str(data.image,1500)),sku:str(data.sku,80),price:number(data.price),stock:data.stock===''||data.stock===null||data.stock===undefined?null:Number(data.stock),active:data.active===false||data.active===0?0:1,weight:data.weight||null,width:data.width||null,height:data.height||null,length:data.length||null};
+ const p={id:str(data.id,80),name:str(data.name,220),description:str(data.description,10000),category:data.category==='beleza'?'corpo':str(data.category,64),brand:str(data.brand,100),family:str(data.family,85),image:secureUrl(str(data.image,1500)),sku:str(data.sku,80),price:number(data.price),stock:data.stock===''||data.stock===null||data.stock===undefined?null:Number(data.stock),active:data.active===false||data.active===0?0:1,weight:data.weight||null,width:data.width||null,height:data.height||null,length:data.length||null};
  if(!p.name||p.name.length<2||!p.category||!(await db.prepare('SELECT id FROM categories WHERE id=?').get(p.category))||!Number.isFinite(p.price)||p.price<0||p.price>100000)throw Object.assign(new Error('Confira nome, categoria e preço'),{status:400});
  if(p.stock!==null&&(!Number.isInteger(p.stock)||p.stock<0))throw Object.assign(new Error('Estoque inválido'),{status:400});
  for(const m of ['weight','width','height','length']){if(p[m]!==null){p[m]=number(p[m]);if(!(p[m]>0&&p[m]<10000))throw Object.assign(new Error('Dimensão ou peso inválido'),{status:400})}}
@@ -50,7 +55,7 @@ async function session(req){const token=cookies(req).mahach_session;if(!token||!
 async function logged(req,res){const s=await session(req);if(!s){problem(res,401,'Acesso restrito ao administrador');return null}return s}
 // A flag de teste NUNCA libera compras ao publico: exige sessao administrativa valida.
 async function checkoutAllowed(req){
- if(process.env.MAHACH_ENABLE_CHECKOUT==='true')return true;
+ if(process.env.MAHACH_ENABLE_CHECKOUT==='true')return paymentReadiness.ready;
  return process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&!!(await session(req));
 }
 function checkOrigin(req){const o=req.headers.origin;const host=req.headers.host;if(!o||!host)return false;try{const u=new URL(o);return u.host===host&&(u.protocol==='http:'||u.protocol==='https:')}catch{return false}}
@@ -59,14 +64,15 @@ function cookieValue(req,value,maxAge=28800){const secure=(process.env.NODE_ENV=
 const counters=new Map();
 function rate(req,key,max,window=60000){const ip=req.socket.remoteAddress||'local',n=Date.now(),k=`${key}:${ip}`,v=counters.get(k)||{time:n,count:0};if(n-v.time>window){v.time=n;v.count=0}v.count++;counters.set(k,v);if(counters.size>4000)for(const [k,v]of counters)if(n-v.time>3600000)counters.delete(k);return v.count<=max}
 function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku}}
-const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.ttf':'font/ttf','.ico':'image/x-icon'};
+const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.woff2':'font/woff2','.ttf':'font/ttf','.ico':'image/x-icon'};
 async function staticFile(req,res,url){
  let pathname;try{pathname=decodeURIComponent(url.pathname)}catch{return problem(res,400,'URL inválida')}
+ if(pathname==='/produtos/beleza-essencial'||pathname==='/produtos/beleza-essencial/'||pathname==='/produtos/beleza-essencial/index.html'){res.writeHead(301,{Location:'/produtos/corpo-e-cuidado/index.html'});return res.end()}
  if(pathname==='/'||pathname==='/admin')pathname=pathname==='/'?'/index.html':'/admin/login.html';
  if(pathname.endsWith('/'))pathname+='index.html';
  if(pathname==='/admin/painel.html'&&!await session(req)){res.writeHead(302,{Location:'/admin'});return res.end()}
  // Bloquear arquivos de configuração, fontes de dados e banco de dados.
- if(!/^\/(?:index\.html|sobre\.html|contato\.html|app\.js|data\.js|scene\.js|polish\.js|styles\.css|pix-checkout\.css|catalogo\.js|checkout\.js|finalizado\.html|finalizado\.js|acompanhar\.html|privacidade\.html|tracking\.js|admin\/(?:login\.html|painel\.html|admin\.js|admin\.css|admin-pg-status\.css)|produtos\/(?:index\.html|perfumaria-arabe\/index\.html|corpo-e-cuidado\/index\.html|beleza-essencial\/index\.html)|assets\/[\w./-]+)$/.test(pathname)||pathname.includes('..'))return problem(res,404,'Não encontrado');
+ if(!/^\/(?:index\.html|sobre\.html|contato\.html|app\.js|data\.js|scene\.js|polish\.js|styles\.css|pix-checkout\.css|catalogo\.js|checkout\.js|finalizado\.html|finalizado\.js|acompanhar\.html|privacidade\.html|tracking\.js|admin\/(?:login\.html|painel\.html|admin\.js|admin\.css|admin-pg-status\.css)|produtos\/(?:index\.html|todos\/index\.html|perfumaria-arabe\/index\.html|corpo-e-cuidado\/index\.html|beleza-essencial\/index\.html)|assets\/[\w./-]+)$/.test(pathname)||pathname.includes('..'))return problem(res,404,'Não encontrado');
  const file=path.join(ROOT,pathname);if(!file.startsWith(ROOT+path.sep))return problem(res,404,'Não encontrado');
  let st;try{const real=fs.realpathSync(file);if(!real.startsWith(ROOT+path.sep))throw 0;st=fs.statSync(real);if(!st.isFile())throw 0}catch{return problem(res,404,'Não encontrado')}
  const ext=path.extname(file);if(!MIME[ext])return problem(res,404,'Não encontrado');
@@ -75,30 +81,6 @@ async function staticFile(req,res,url){
 function security(res){
  const csp="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; font-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"+(process.env.NODE_ENV==='production'?'; upgrade-insecure-requests':'');
  res.setHeader('Content-Security-Policy',csp);res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');res.setHeader('X-Permitted-Cross-Domain-Policies','none');res.setHeader('Origin-Agent-Cluster','?1');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');res.setHeader('Cross-Origin-Resource-Policy','same-origin');res.setHeader('Cross-Origin-Opener-Policy','same-origin');if(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
-}
-async function vendizapFetch(endpoint){const id=conf('VENDIZAP_ID'),secret=conf('VENDIZAP_SECRET');if(!id||!secret)throw Object.assign(new Error('Integração Vendizap não configurada'),{status:503});const res=await fetch('https://app.vendizap.com/api/'+endpoint,{headers:{'X-Auth-Id':id,'X-Auth-Secret':secret,'User-Agent':'LaCourLoja/2.0','Accept':'application/json'},signal:AbortSignal.timeout(12000)});if(!res.ok)throw Object.assign(new Error('Vendizap respondeu '+res.status),{status:502});return res.json()}
-async function syncVendizap(){let updates=0,images=0;
- const update=db.prepare('UPDATE products SET name=?,price=?,description=?,image=?,search_text=? WHERE id=?');
- const insert=db.prepare('INSERT OR IGNORE INTO products(id,name,price,description,category,brand,family,image,sku,active,search_text) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
- for(let skip=0;skip<10000;skip+=100){const raw=await vendizapFetch('produtos?limit=100&skip='+skip);const arr=Array.isArray(raw)?raw:Array.isArray(raw.produtos)?raw.produtos:Array.isArray(raw.data)?raw.data:[];if(!Array.isArray(arr))break;
- for(const r of arr){const id=str(r._id||r.id,80);if(!id)continue;
- const old=(await db.prepare('SELECT * FROM products WHERE id=?').get(id));
- const name=str(r.descricao||r.nome,220)||old?.name;if(!name)continue;
- const value=r.preco===undefined?NaN:Number(r.preco),price=Number.isFinite(value)&&value>=0?value:old?.price??0;
- const desc=str(r.detalhes,10000)||old?.description||'';
- const imgs=Array.isArray(r.imagens)?r.imagens:[];const first=imgs.find(x=>typeof x==='string'||(x&&typeof x==='object'));
- const remoteImage=secureUrl(typeof first==='string'?first:first?.url||first?.src);
- const manualImage=old?.image&&(/^(?:\/assets\/produtos\/|https:\/\/res\.cloudinary\.com\/)/.test(old.image))?old.image:'';
- const image=manualImage||remoteImage||old?.image||'';
- if(image)images++;
- if(old){await update.run(name,price,desc,image,searchText({name,description:desc,brand:old.brand,family:old.family}),id)}
- else await insert.run(id,name,price,desc,'perfumes','Vendizap','','',str(r.codigo,80),r.exibir===false?0:1,searchText({name,description:desc,brand:'Vendizap',family:''}));
- if(!old&&image)(await db.prepare('UPDATE products SET image=? WHERE id=?').run(image,id));
- updates++;
- }
- if(arr.length<100)break;
- }
- return {synced:updates,images};
 }
 const liveQuotes=new Map();
 function itemsFingerprint(items,cep){return hash(cep+JSON.stringify(items.map(x=>[x.p.id,x.qty]).sort((a,b)=>a[0].localeCompare(b[0]))))}
@@ -204,9 +186,9 @@ async function processVerifiedPayment(paymentId){
 }
 async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/health'&&method==='GET')return json(res,200,{ok:true,catalog:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n});
- if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:await checkoutAllowed(req),testMode:process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&process.env.MAHACH_ENABLE_CHECKOUT!=='true'},{'Cache-Control':'no-store'});
+ if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:await checkoutAllowed(req),paymentReady:paymentReadiness.ready,testMode:process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&process.env.MAHACH_ENABLE_CHECKOUT!=='true'},{'Cache-Control':'no-store'});
  if(route==='/api/meta'&&method==='GET'){
-  const requestedCategory=str(u.searchParams.get('category'),64);
+  const requestedCategory=u.searchParams.get('category')==='beleza'?'corpo':str(u.searchParams.get('category'),64);
   const categories=(await db.prepare(`SELECT c.id,c.name,c.subtitle,COUNT(p.id) total
     FROM categories c LEFT JOIN products p ON p.category=c.id AND p.active=1
     GROUP BY c.id ORDER BY CASE c.id WHEN 'perfumes' THEN 0 WHEN 'corpo' THEN 1 WHEN 'beleza' THEN 2 ELSE 9 END,c.name`).all());
@@ -216,12 +198,12 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
     :(await db.prepare(`SELECT brand,COUNT(*) total FROM products WHERE active=1 AND brand<>'' GROUP BY brand ORDER BY total DESC,brand LIMIT 500`).all());
   const priceStats=await db.prepare('SELECT MAX(price) max_price FROM products WHERE active=1').get();
   const priceMax=Math.max(1000,Math.ceil(Number(priceStats?.max_price||6000)/100)*100);
-  return json(res,200,{categories,brands,priceMax,supportEmail:conf('ADMIN_EMAIL')||SUPPORT_EMAIL,whatsapp:conf('WHATSAPP')||DEFAULT_WHATSAPP,pickupAddress:conf('SHOP_ADDRESS')||'',onlinePayments:commerce.configured(conf)},{'Cache-Control':'no-store'});
+  return json(res,200,{categories,brands,priceMax,supportEmail:conf('SUPPORT_EMAIL')||SUPPORT_EMAIL,whatsapp:conf('WHATSAPP')||DEFAULT_WHATSAPP,pickupAddress:conf('SHOP_ADDRESS')||'',onlinePayments:commerce.configured(conf)},{'Cache-Control':'no-store'});
  }
  if(route==='/api/products'&&method==='GET'){
  if(!rate(req,'search',180))return problem(res,429,'Muitas buscas. Tente novamente.');
  const page=Math.min(500,Math.max(1,Number(u.searchParams.get('page'))||1)),limit=Math.min(48,Math.max(1,Number(u.searchParams.get('limit'))||24));
- const category=str(u.searchParams.get('category'),64),brand=str(u.searchParams.get('brand'),100),family=str(u.searchParams.get('family'),85),q=normalizeCatalogQuery(str(u.searchParams.get('q'),100));
+ const category=str(u.searchParams.get('category'),64)==='beleza'?'corpo':str(u.searchParams.get('category'),64),brand=str(u.searchParams.get('brand'),100),family=str(u.searchParams.get('family'),85),q=normalizeCatalogQuery(str(u.searchParams.get('q'),100));
  const where=['active=1'],args=[];
  const selectedBrands=[...new Set(u.searchParams.getAll('brand').map(x=>str(x,100)).filter(Boolean))].slice(0,30);
  applyCatalogFilters(u.searchParams,where,args);
@@ -390,7 +372,6 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/admin/integrations/test'&&method==='POST'){
   if(!rate(req,'connect-test',12,900000))return problem(res,429,'Aguarde para testar novamente');
   const provider=str((await body(req)).provider,30);
-  if(provider==='vendizap'){const data=await vendizapFetch('categorias?limit=1');return json(res,200,{ok:true,message:'Vendizap respondeu com sucesso; autenticação confirmada.'});}
   if(provider==='melhor-envio'){
    const token=String(conf('MELHOR_ENVIO_TOKEN')||'').trim().replace(/^Bearer\s+/i,'');
    if(!token)return problem(res,400,'Configure o token do Melhor Envio');
@@ -403,9 +384,8 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    return json(res,200,{ok:true,message:'Melhor Envio autenticou com sucesso na API oficial.'});
   }
   if(provider==='mercado-pago'){
-   const token=conf('MERCADO_PAGO_ACCESS_TOKEN');if(!token)return problem(res,400,'Configure o Access Token');
-   const response=await fetch('https://api.mercadopago.com/users/me',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},signal:AbortSignal.timeout(10000)});
-   if(!response.ok)return problem(res,502,'Mercado Pago recusou autenticação (HTTP '+response.status+')');return json(res,200,{ok:true,message:'Credencial Mercado Pago válida. Cobranças ainda não estão ativadas.'});
+   const checked=await commerce.validateConnection(conf);paymentReadiness=checked;return json(res,200,{ok:checked.ready,message:checked.ready?'Mercado Pago autenticado. Pix e cartão disponíveis quando o checkout estiver habilitado.':'Mercado Pago pendente: '+checked.reason});
+
   }
   if(provider==='email'){
    if(!conf('RESEND_API_KEY')||!conf('MAIL_FROM')||!conf('ADMIN_EMAIL'))return problem(res,400,'Configure API Key, remetente verificado e e-mail da loja');
@@ -413,7 +393,6 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    if(!result.ok)return problem(res,502,result.reason);
    return json(res,200,{ok:true,message:'E-mail de teste aceito pelo provedor. Confirme a chegada na caixa de entrada.'});
   }
-  if(provider==='bling')return json(res,200,{ok:false,message:'Bling exige o fluxo OAuth 2.0 e autorização da sua conta; salvar Client ID/Secret não conclui a conexão.'});
   return problem(res,400,'Integração desconhecida');
  }
 
@@ -439,10 +418,10 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const x=await db.prepare('UPDATE customers SET marketing_opt_in=FALSE,marketing_consent_at=NULL,updated_at=NOW() WHERE email=?').run(email);
   return x.changes?json(res,200,{ok:true}):problem(res,404,'Cliente não encontrado');
  }
- if(route==='/api/admin/stats'&&method==='GET')return json(res,200,{products:(await db.prepare('SELECT COUNT(*) n FROM products').get()).n,photos:(await db.prepare("SELECT COUNT(*) n FROM products WHERE image<>''").get()).n,orders:(await db.prepare('SELECT COUNT(*) n FROM orders').get()).n,customers:(await db.prepare('SELECT COUNT(*) n FROM customers').get()).n,pending:(await db.prepare("SELECT COUNT(*) n FROM orders WHERE status IN ('pedido_criado','aguardando_confirmacao')").get()).n,outOfStock:(await db.prepare('SELECT COUNT(*) n FROM products WHERE stock=0 AND active=1').get()).n,visible:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n,categories:(await db.prepare('SELECT COUNT(*) n FROM categories').get()).n,vendizapConfigured:!!(conf('VENDIZAP_ID')&&conf('VENDIZAP_SECRET')),shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),blingConfigured:!!(conf('BLING_CLIENT_ID')&&conf('BLING_CLIENT_SECRET')),mercadoPagoConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL'))});
+ if(route==='/api/admin/stats'&&method==='GET')return json(res,200,{products:(await db.prepare('SELECT COUNT(*) n FROM products').get()).n,photos:(await db.prepare("SELECT COUNT(*) n FROM products WHERE image<>''").get()).n,orders:(await db.prepare('SELECT COUNT(*) n FROM orders').get()).n,customers:(await db.prepare('SELECT COUNT(*) n FROM customers').get()).n,pending:(await db.prepare("SELECT COUNT(*) n FROM orders WHERE status IN ('pedido_criado','aguardando_confirmacao')").get()).n,outOfStock:(await db.prepare('SELECT COUNT(*) n FROM products WHERE stock=0 AND active=1').get()).n,visible:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n,categories:(await db.prepare('SELECT COUNT(*) n FROM categories').get()).n,shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&conf('ORIGIN_CEP')),mercadoPagoConfigured:commerce.configured(conf),emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL'))});
  if(route==='/api/admin/import-csv'&&method==='POST'){if(!rate(req,'import',4,3600000))return problem(res,429,'Limite de importações excedido');const raw=await bodyCsv(req);try{return json(res,200,await importIntoPg(db,raw,searchText,secureUrl))}catch(e){return problem(res,400,e.message)}}
  if(route==='/api/admin/products'&&method==='GET'){
- const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number(u.searchParams.get('page'))||1));const where=q?'WHERE name ILIKE ? OR brand ILIKE ?':'',args=q?['%'+q+'%','%'+q+'%']:[];
+ const q=str(u.searchParams.get('q'),100),p=Math.max(1,Math.min(10000,Number(u.searchParams.get('page'))||1));const terms=[],args=[];if(q){terms.push('(name ILIKE ? OR brand ILIKE ? OR sku ILIKE ?)');args.push('%'+q+'%','%'+q+'%','%'+q+'%')}if(u.searchParams.get('stock')==='low')terms.push('active=1 AND stock<=5');const where=terms.length?'WHERE '+terms.join(' AND '):'';
  return json(res,200,{total:(await db.prepare('SELECT COUNT(*) n FROM products '+where).get(...args)).n,products:(await db.prepare('SELECT * FROM products '+where+' ORDER BY name LIMIT 30 OFFSET ?').all(...args,(p-1)*30)),page:p});
  }
  if(route==='/api/admin/products'&&method==='POST'){
@@ -469,7 +448,8 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   if(['perfumes','corpo','beleza'].includes(catEdit[1]))return problem(res,409,'Categoria principal protegida');
   const result=(await db.prepare('DELETE FROM categories WHERE id=?').run(catEdit[1]));return result.changes?json(res,200,{ok:true}):problem(res,404,'Categoria não encontrada');
  }
- if(route==='/api/admin/orders'&&method==='GET')return json(res,200,{orders:(await db.prepare('SELECT * FROM orders ORDER BY created DESC LIMIT 100').all()).map(x=>({...x,whatsapp_tracking:x.delivery==='correios'&&x.tracking_code?'https://wa.me/55'+x.phone.replace(/^55/,'')+'?text='+encodeURIComponent('Olá, '+x.customer_name+'! Código dos Correios para o pedido '+x.id+': '+x.tracking_code+'. Rastreie em https://rastreamento.correios.com.br/app/index.php'):'',items:JSON.parse(x.items_json),items_json:undefined,public_token_hash:undefined}))});
+ if(route==='/api/admin/orders'&&method==='GET')return json(res,200,await management.findOrders(db,u.searchParams));
+ if(route==='/api/admin/dashboard'&&method==='GET')return json(res,200,await management.dashboard(db,u.searchParams));
  const mailRetry=route.match(/^\/api\/admin\/orders\/(MH-[A-Z0-9]+)\/notify$/);
  if(mailRetry&&method==='POST'){
   const o=(await db.prepare('SELECT * FROM orders WHERE id=?').get(mailRetry[1]));if(!o)return problem(res,404,'Pedido não encontrado');
@@ -477,7 +457,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const results={};
   if(o.payment_status==='aprovado')results.purchase=await sendTransactional(o.id,'approved');
   else if(o.payment==='cash')results.receipt=await sendTransactional(o.id,'created');
-  if(o.delivery==='correios'&&o.tracking_code)results.tracking=await sendTransactional(o.id,'tracking');
+  if(['correios','transportadora'].includes(o.delivery)&&o.tracking_code)results.tracking=await sendTransactional(o.id,'tracking');
   return json(res,200,{ok:true,results});
  }
  const orderEdit=route.match(/^\/api\/admin\/orders\/(MH-[A-Z0-9]+)$/);
@@ -486,17 +466,9 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  if(['pix','card'].includes(old.payment)&&status==='pagamento_aprovado'&&old.payment_status!=='aprovado')return problem(res,409,'Pagamento online deve ser aprovado pelo Mercado Pago, nunca manualmente');
  const changed=old.tracking_code!==tracking_code;
  (await db.prepare("UPDATE orders SET status=?,tracking_code=?,tracking_url=?,payment_status=CASE WHEN ?='pagamento_aprovado' AND payment='cash' THEN 'aprovado' ELSE payment_status END,tracking_email_sent=CASE WHEN tracking_code<>? THEN 0 ELSE tracking_email_sent END WHERE id=?").run(status,tracking_code,tracking_url,status,tracking_code,orderEdit[1]));
- const mail=old.delivery==='correios'&&tracking_code&&changed&&['em_preparacao','enviado','concluido'].includes(status)?await sendTransactional(orderEdit[1],'tracking'):{};
+ const mail=['correios','transportadora'].includes(old.delivery)&&tracking_code&&changed&&['em_preparacao','enviado','concluido'].includes(status)?await sendTransactional(orderEdit[1],'tracking'):{};
  return json(res,200,{ok:true,email:mail});
  }
- if(route==='/api/admin/bling/preview'&&method==='GET'){
- const skuById=new Map((await db.prepare('SELECT id,sku FROM products').all()).map(p=>[p.id,p.sku]));
- const all=(await db.prepare("SELECT * FROM orders WHERE (status IN ('pagamento_aprovado','em_preparacao','enviado','pronto_retirada','concluido') OR payment_status='aprovado') AND bling_export_status='nao_enviado' ORDER BY created LIMIT 100").all());
- return json(res,200,{configured:!!(conf('BLING_CLIENT_ID')&&conf('BLING_CLIENT_SECRET')),
- orders:all.map(o=>({reference:o.id,customer:o.customer_name,shipping:o.shipping_service,items:JSON.parse(o.items_json).map(i=>({sku:skuById.get(i.id)||'',description:i.name,quantity:i.qty,price:i.unit_price})),status:'AGUARDANDO_CONEXAO_E_REVISAO'})),
- notice:'Prévia apenas. Nada é enviado ao Bling, nem são emitidas notas ou baixado estoque sem autorização OAuth, mapeamento de SKUs e validação fiscal.'});
- }
- if(route==='/api/admin/sync-vendizap'&&method==='POST'){if(!rate(req,'sync',3,3600000))return problem(res,429,'Limite de sincronizações atingido');return json(res,200,await syncVendizap())}
  return problem(res,404,'Rota não encontrada');
  }
  return problem(res,404,'Rota não encontrada');

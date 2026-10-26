@@ -2,7 +2,7 @@
 const {parse,cleanCategory}=require('./csv-import');
 const crypto=require('node:crypto');
 function slug(value){return cleanCategory(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,64)}
-const aliases={'perfumes':'perfumes','perfumaria':'perfumes','corpo-e-cuidado':'corpo','corpo-e-cuidados':'corpo','beleza-essencial':'beleza'};
+const aliases={'perfumes':'perfumes','perfumaria':'perfumes','corpo-e-cuidado':'corpo','corpo-e-cuidados':'corpo','beleza-essencial':'corpo','beleza':'corpo','corpo':'corpo'};
 async function importIntoPg(db,raw,searchText,secureUrl){
  const rows=parse(raw);if(rows.length>10000)throw Error('Limite de 10.000 produtos por arquivo');
  return db.transaction(async()=>{
