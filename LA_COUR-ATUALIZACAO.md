@@ -1,56 +1,45 @@
 # LA COUR — Perfumaria
 
-Atualização aplicada sobre a versão atual do repositório, base `df0dd32b60f0e027bfeeedd1608cb1c4dfb45bac`, que já inclui Pix com QR Code, preenchimento por CEP e checkout em duas colunas. O ZIP anexado era anterior a essas melhorias.
+Projeto existente atualizado, com PostgreSQL, painel, estoque, sacola, checkout e integrações preservados. CNPJ: 67.872.786/0001-08. Atendimento: sac.lacour@gmail.com e WhatsApp +55 11 94085-6397.
 
-## Identidade e apresentação
+## Loja
 
-- Marca LA COUR — Perfumaria em todas as páginas, textos de compra, mensagens, metadados, privacidade, administração e atendimento.
-- CNPJ mantido: 67.872.786/0001-08. Telefone e e-mail de atendimento preservados.
-- Layout em creme, preto, marrom e dourado discreto, com navegação e componentes existentes.
-- Asad, Khamrah, Badee Al Oud e Fakhar Black carregam preço e disponibilidade pela API atual. A foto cadastrada pela loja tem prioridade; as fotos oficiais locais são usadas quando não existe foto cadastrada.
-- Arquivos das campanhas antigas removidos. Fotos existentes dos outros produtos preservadas.
+Navegação no computador e celular: Início, Perfumes, Corpo e cuidado, Sobre e Contato. Todos os produtos continuam acessíveis pela busca e por “Ver todos os produtos”. Links antigos de Beleza essencial redirecionam para Corpo e cuidado.
 
-## Compatibilidade
+A home mantém o banner original, apresenta as duas coleções, os destaques disponíveis, a narrativa da marca e o rodapé preto. As flores seguem a campanha aprovada. Produtos usam fotos e preços reais cadastrados. Menus e cabeçalho de vidro, animações por direção de scroll e preferência por movimento reduzido são preservados.
 
-A estrutura PostgreSQL, IDs de produtos, estoque, pedidos, integrações, rotas, sessão administrativa e carrinhos existentes foram preservados. Identificadores técnicos legados (schema, variáveis de ambiente, cookies e chaves de armazenamento) permanecem para evitar perda de acesso ou dados. A chave de idempotência Pix anterior também permanece para que pedidos em andamento não gerem cobranças duplicadas.
+O catálogo tem somente faixa de preço na lateral. As categorias ficam no topo. Perfumes: Todos, Árabes, Importados, Nichos, Masculino, Feminino e Unissex. Corpo e cuidado: Masculino, Feminino, Unissex e Infantil; clicar novamente no público selecionado volta ao departamento completo. Não há filtro lateral de marca. Público pode ser informado no cadastro manual; nomes explícitos servem de compatibilidade quando o campo está vazio.
 
-O serviço estava com checkout público desativado e modo de teste habilitado antes desta atualização. Essa configuração foi preservada. Publicar o design não habilita vendas nem altera credenciais.
+Os 1.771 itens antigos foram retirados do catálogo ativo por solicitação, com cópia privada no banco. O arquivo de catálogo inicial está vazio e não reimporta produtos. Cadastros manuais posteriores permanecem. Não executar novamente o script de limpeza.
 
-## Validação
+## Checkout
 
-- Testes existentes: SQL, catálogo, autenticação, CSRF, configurações, fotos locais, Cloudinary, clientes, pedidos, opt-in, webhook, estoque e Pix.
-- Pagamentos testados com simulação, sem cobrança real.
-- Navegador: página inicial, quatro destaques, detalhes, carrinho persistente, formulário de checkout, catálogo, busca, menu e filtros móveis.
-- Larguras conferidas: 320, 390, 768, 1024 e 1440 pixels, sem rolagem horizontal na página inicial.
-- Links de recursos locais e ausência de marcas antigas no HTML conferidos.
-- A validação local do navegador usa respostas públicas capturadas da loja para não escrever no banco real. Integrações externas continuam dependendo das credenciais e configurações existentes.
+Fluxo único, na ordem: dados, entrega/endereço, pagamento, revisão e botão de concluir. O resumo fica depois dos campos, no mesmo fluxo em todas as telas. Não há retirada na loja nem pagamento presencial em pedidos novos. As duas opções são Entrega via Uber/99 e Correios; Pix e cartão são os únicos pagamentos novos.
 
-## Executar o projeto
+Uber/99: corrida combinada e paga separadamente à loja, informada antes do pagamento; não há valor de corrida inventado. Após aprovação do Pix há link para combinar a entrega. A volta do cartão também oferece esse contato quando o servidor confirma o pagamento.
 
-Use Node.js 22.13 ou superior. Instale as dependências com `npm ci` e execute com `npm start`. Use a configuração existente de ambiente e a chave original das configurações criptografadas. Não gere uma chave nova para substituir a chave atual.
+Correios: apenas cotações reais dos Correios, vinculadas aos produtos e CEP, com peso e dimensões cadastrados. Não usar nome Correios para preços da Jadlog ou de outras empresas. Pela tabela atual do Melhor Envio, perfumes não são aceitos nos Correios através dessa integração; o site explica a indisponibilidade. É necessário definir um caminho de frete compatível antes da venda nacional de perfumes.
 
-## Imagens
+O QR Pix aparece numa tela de pagamento própria. Erros do provedor preservam o pedido e permitem recuperação sem nova compra. Cartão redireciona ao Mercado Pago; dados do cartão não passam pelo site. Preferências já criadas são reutilizadas. Pedidos cancelados não permitem iniciar novamente Pix ou cartão. A assinatura do webhook, conferência de valor e baixa de estoque permanecem no servidor.
 
-Fotos dos produtos: fontes registradas em `assets/product-photo-sources.json`, obtidas da Lattafa. Imagens geradas apenas para a campanha visual, sem substituir as fotos reais dos produtos.
+## Administração
 
-Banner: `assets/la-cour-hero.webp`; versão vertical: `assets/la-cour-hero-mobile.webp`. Criado com a ferramenta integrada de geração de imagens. Direção usada: fotografia editorial de um frasco âmbar LA COUR entre madeira escura de oud e flores brancas, luz dourada, fundo creme com espaço livre à esquerda, sem interface, testemunhos ou outras marcas. A composição de campanha é ilustrativa e não identifica um produto à venda.
+Visual de vidro acetinado inspirado no vídeo enviado, com creme, marrom e dourado discreto. Dashboard usa dados reais: vendas pagas, pedidos, ticket médio, aguardando envio, comparação com período anterior, gráfico diário de vendas/pedidos, status em rosca, formas de pagamento, produtos mais vendidos, pedidos recentes e estoque baixo. Exportação CSV por dia no período escolhido. Datas e agrupamentos seguem America/Sao_Paulo. Vendas incluem frete e não representam lucro; cancelamentos são excluídos das vendas pagas.
 
-## Experiência visual — atualização 2
+Períodos: hoje, 7 dias, 30 dias e personalizado. O painel inclui uma lista de preparação para lançamento com as configurações efetivas do servidor, sem expor credenciais. Configuração preenchida não é confirmação de recebimento bancário ou de entrega.
 
-A imagem principal da home foi mantida e agora começa atrás do cabeçalho. A navegação é fixa e transparente no topo; após a rolagem recebe fundo translúcido com desfoque, reflexos e bordas suaves. O rodapé é preto.
+Busca de pedidos por código, nome e e-mail em todo o histórico, paginação, dados completos, andamento, pagamento e rastreio separados. Pedidos antigos, inclusive de retirada, continuam consultáveis. Cadastro de produtos, fotos, categorias, SKU, público e estoque preservado. Bling/Vendizap retirados; sincronização do Mercado Livre não ativada. Mercado Pago e Mercado Livre são conexões distintas.
 
-A página `/sobre.html` apresenta uma narrativa de marca criada para a LA COUR, sem inventar datas, nomes de fundadores ou números de vendas. Cabeçalho, menu móvel e rodapé apontam para essa página.
+Configurações não vazias do ambiente prevalecem sobre valores salvos no painel. E-mail administrativo é separado do SAC. Chave de criptografia, nomes de schema, cookies, IDs e idempotência anteriores são mantidos por compatibilidade.
 
-O catálogo mantém a grade, filtros e pesquisa existentes. Apenas o cabeçalho e o banner foram alterados; a imagem nova segue o creme, o âmbar e as flores da home, sem galhos. As novas imagens de campanha são `assets/la-cour-collection.webp` e `assets/la-cour-story.webp`. As flores transparentes de `assets/la-cour-flowers.webp` se sobrepõem às bordas das fotos em posições limitadas e sem receber cliques. Todas foram criadas pela ferramenta integrada de imagens, usando a campanha original como referência de cor, iluminação e formato das flores.
+## Situação do lançamento
 
-As animações respeitam `prefers-reduced-motion`. O conteúdo entra de baixo ao descer e de cima ao subir, com movimento discreto nas imagens e flores. O cabeçalho ganha estados próprios em cada direção. As animações não substituem a rolagem nativa.
+Consulte `LANCAMENTO_LA_COUR.md`. A publicação do visual não comprova habilitação de pagamentos reais. No diagnóstico de 26/10/2026 a conexão efetiva do Mercado Pago pertence a uma conta de teste, portanto o checkout permanece fechado para visitantes, mesmo com a flag de ativação definida. Administrador em modo de teste pode validar o fluxo.
 
-## Catálogo, Contato e celular — atualização 3
+## Validação e execução
 
-Os perfumes da home e do catálogo são apresentados sobre o mesmo fundo da página, sem bordas, caixas ou sombras individuais. A grade mantém fotos reais, nomes de apresentação menores e nome completo nos detalhes, variantes, marca, preço e estoque. Ícones de sacola adicionam produtos com nova verificação de disponibilidade; favoritos ficam no próprio navegador.
+Testes offline cobrem catálogo, filtros, autenticação/CSRF, fotos, configurações, dados privados, consentimento, Pix, cartão, recuperação de pedidos, frete, webhook e estoque. Navegação validada com PostgreSQL local e navegador em 320, 390, 768 e 1440 pixels; verificados estados sem vendas e com vendas simuladas, exportação e cálculos. Não foram geradas cobranças reais ou enviadas mensagens.
 
-A página Perfumes inicia com a categoria de perfumaria. As seções superiores e os checkboxes laterais são Todos, Árabes, Importados, Nicho, Masculino, Feminino e Unissex. Outras categorias continuam acessíveis pelos links da loja e pela busca. Marcas permitem múltipla seleção; a faixa de preço filtra o catálogo inteiro no servidor, mantendo paginação e URL compartilhável. A classificação usa listas explícitas de marcas em `catalog-filters.js` e os marcadores de gênero que já existem no nome; produtos sem classificação continuam acessíveis em Todos e na busca. Importados agrupa as marcas internacionais de designer/nicho configuradas nessa lista; Árabes agrupa as casas árabes listadas.
+Use Node.js 22.13+ e `npm ci`, depois `npm start`. Preserve o ambiente e a chave original `MAHACH_SETTINGS_KEY`. Não inclua `.env` nem credenciais no Git ou ZIP. Para verificações: `npm run test:offline`, `npm run test:admin`, `npm run test:catalog`, `npm run test:management`, `node scripts/test-loja-clientes.cjs` e `node scripts/test-pix-checkout.cjs`.
 
-A página `/contato.html` oferece WhatsApp, e-mail, acompanhamento de pedidos e ajuda para entregas atrasadas. Todos os canais foram atualizados para +55 11 94085-6397 e sac.lacour@gmail.com. Na primeira inicialização desta versão, a atualização de contato é gravada uma única vez nas configurações já existentes (WHATSAPP, ADMIN_EMAIL e SHIPPING_CONTACT_EMAIL), com marcador interno. Edições futuras pelo painel não são sobrescritas. O remetente verificado do provedor de e-mail permanece configurado como antes; as respostas passam a usar o endereço de atendimento. Não foram enviados e-mails nem mensagens como parte da validação.
-
-No celular foram revistos hierarquia, fotos, nomes, preços, áreas de toque, filtros, Contato, Sobre e janelas de detalhes/checkout. O checkout agora permanece fixo dentro da tela quando aberto após rolar a página. Os filtros foram verificados em PostgreSQL local com a base de catálogo do projeto, além dos testes existentes e da navegação em larguras de 320 a 1440 pixels.
+As fotos de produto são reais; as imagens de campanha são ilustrativas. Fontes locais DM Sans/Cormorant Garamond com licenças em assets/fonts. Fotos de produto enviadas ao painel usam Cloudinary quando configurado para evitar perda na hospedagem.

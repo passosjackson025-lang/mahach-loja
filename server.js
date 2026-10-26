@@ -32,7 +32,7 @@ function normalizeCatalogQuery(value){return String(value??'').normalize('NFD').
 const conf=(name)=>settings.get(name);
 function quickDeliveryWhatsapp(o){
  const items=JSON.parse(o.items_json).map(x=>x.qty+'x '+x.name).join(', ');
- const text=`Olá, LA COUR! Já efetuei o pagamento dos produtos do pedido ${o.id} e gostaria de combinar somente a corrida por ${o.delivery==='uber'?'Uber':'99'}.\nNome: ${o.customer_name}\nEndereço: ${o.address} – CEP ${o.cep}\nItens: ${items}\nValor dos produtos: R$ ${Number(o.subtotal).toFixed(2).replace('.',',')} (pagamento confirmado).\nQual será o valor e como vamos organizar a entrega?`;
+ const text=`Olá, LA COUR! Já efetuei o pagamento dos produtos do pedido ${o.id} e gostaria de combinar somente a corrida por ${o.delivery==='uber'?'Uber/99':'99'}.\nNome: ${o.customer_name}\nEndereço: ${o.address} – CEP ${o.cep}\nItens: ${items}\nValor dos produtos: R$ ${Number(o.subtotal).toFixed(2).replace('.',',')} (pagamento confirmado).\nQual será o valor e como vamos organizar a entrega?`;
  return 'https://wa.me/'+(conf('WHATSAPP')||DEFAULT_WHATSAPP)+'?text='+encodeURIComponent(text);
 }
 function searchText(p){return `${p.name||''} ${p.brand||''} ${p.family||''} ${p.description||''}`.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().slice(0,14000)}
@@ -92,6 +92,7 @@ async function shippingQuote(payload){
  const cep=str(payload.cep,12).replace(/\D/g,'');if(cep.length!==8)throw Object.assign(new Error('CEP inválido'),{status:400});
  const items=await collectItems(payload.items);
  if(!items.length)throw Object.assign(new Error('Sacola vazia'),{status:400});
+ if(items.some(({p})=>p.category==='perfumes'))throw Object.assign(new Error('Os Correios não estão disponíveis para perfumes pela integração atual. Consulte a LA COUR para organizar a entrega.'),{status:422});
  // Frete exige peso e dimensoes reais da embalagem; sem estimativas ficticias.
  if(items.some(({p})=>![p.width,p.height,p.length,p.weight].every(n=>Number.isFinite(Number(n))&&Number(n)>0)))throw Object.assign(new Error('Para calcular frete, cadastre peso e dimensoes de todos os produtos da sacola.'),{status:422});
  const products=items.map(({p,qty})=>({id:p.id,width:Number(p.width),height:Number(p.height),length:Number(p.length),weight:Number(p.weight),insurance_value:p.price,quantity:qty}));
@@ -103,17 +104,10 @@ async function shippingQuote(payload){
   throw Object.assign(new Error(reason),{status:502});
  }
  const data=await r.json();
- // Perfumes: nao oferecer Correios, LATAM, Azul ou Loggi; restricoes conforme tabela Melhor Envio.
- const authorized=/jadlog|buslog|j\s*&\s*t|\bjet\b|pegaki|ponto parceiro/i;
+ // Esta modalidade vende somente fretes reais dos Correios. A integração
+ // Melhor Envio não autoriza perfumes pelos Correios (tabela do provedor).
  const allRates=Array.isArray(data)?data:[];
- const validRates=allRates.filter(x=>x&&!x.error&&(x.custom_price||x.price));
- const perfumeRates=validRates.filter(x=>authorized.test(String(x.company?.name||'')));
- if(!perfumeRates.length){
-  // Sem CEP, destinatario, valores ou credenciais nos logs.
-  const names=[...new Set(validRates.map(x=>String(x.company?.name||'').replace(/[^a-zA-Z0-9 .&-]/g,'').slice(0,40)))].filter(Boolean).slice(0,12);
-  console.info('[Frete LA COUR] cotacoes_recebidas='+allRates.length+' validas='+validRates.length+' adequadas_para_perfume=0 transportadoras='+names.join('|').slice(0,280));
- }
- return perfumeRates
+ return allRates.filter(x=>x&&!x.error&&(x.custom_price||x.price)&&/^correios$/i.test(String(x.company?.name||'').trim()))
   .map(x=>({service:String(x.name||'Entrega'),carrier:/^jet$/i.test(String(x.company?.name||''))?'J&T Express':String(x.company?.name||'Transportadora'),cost:Number(x.custom_price||x.price),days:Number(x.custom_delivery_time||x.delivery_time),provider:'Melhor Envio'}))
   .filter(x=>Number.isFinite(x.cost)&&x.cost>=0&&Number.isFinite(x.days)&&x.days>=0);
 }
@@ -145,7 +139,7 @@ async function sendTransactional(orderId,kind){
  const trackingPage='https://rastreamento.correios.com.br/app/index.php';
  const customerSubject=approved?'LA COUR: pagamento aprovado · '+o.id:tracking?'LA COUR: seu código de rastreio · '+o.id:'LA COUR: pedido registrado · '+o.id;
  const quickDelivery=['uber','99'].includes(o.delivery);
- const custHtml=summary+(tracking?`<p>Seu código dos Correios: <strong>${esc(o.tracking_code)}</strong></p><p>Consulte diretamente em <a href="${trackingPage}">Rastreamento Correios</a>.</p>`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe LA COUR.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':o.delivery==='correios'?'<p>O código de rastreamento dos Correios será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
+ const custHtml=summary+(tracking?`<p>Seu código de rastreamento: <strong>${esc(o.tracking_code)}</strong></p><p>Consulte diretamente em <a href="${trackingPage}">Rastreamento Correios</a>.</p>`:approved?`<p><strong>Pagamento aprovado.</strong> Total R$ ${total}. ${o.status==='estoque_pendente'?'Sua compra está aguardando verificação de estoque pela equipe LA COUR.':'A loja dará sequência à separação do pedido.'}</p>${quickDelivery?'<p>A corrida por Uber/99 não foi cobrada neste pagamento. Entre em contato pelo WhatsApp do atendimento para combinar o valor e a entrega.</p>':['correios','transportadora'].includes(o.delivery)?'<p>O código de rastreamento será enviado após a postagem.</p>':'<p>Seu pedido está em preparação para retirada.</p>'}`:'<p>Seu pedido foi registrado para retirada. O pagamento em dinheiro será feito presencialmente. Nenhum pagamento online foi realizado.</p>')+'<p>A nota fiscal será enviada após emissão pelo sistema fiscal da loja, quando disponível.</p>';
  const result={};
  const flag=tracking?'tracking_email_sent':'customer_email_sent';
  if(customer&&!o[flag]){result.customer=await commerce.sendEmail(conf,customer,customerSubject,custHtml);if(result.customer.ok)(await db.prepare('UPDATE orders SET '+flag+'=1 WHERE id=?').run(orderId))}
@@ -289,6 +283,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const o=await db.prepare('SELECT * FROM orders WHERE id=? AND public_token_hash=?').get(reference,hash(token));
   if(!o||o.payment!=='pix')return problem(res,404,'Pedido Pix nao encontrado');
   if(o.payment_status==='aprovado')return json(res,200,{paid:true});
+  if(o.status==='cancelado')return problem(res,409,'Este pedido foi cancelado');
   let details;
   if(/^\d+$/.test(String(o.mp_payment_id||''))){
    const payment=await commerce.getVerifiedPayment(conf,o.mp_payment_id);
@@ -311,18 +306,17 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   // Nunca permitir pagamento se a loja nao sabe quantas unidades tem.
   if(items.some(({p})=>p.stock===null||p.stock===undefined))return problem(res,400,'Informe o estoque dos produtos antes de receber pagamentos');
   const customer_name=str(data.name,120),phone=str(data.phone,20).replace(/\D/g,''),email=str(data.email,200).toLowerCase(),delivery=str(data.delivery,20),payment=str(data.payment,30),cep=str(data.cep,12).replace(/\D/g,''),address=str(data.address,320);
-  if(customer_name.length<3||phone.length<10||phone.length>13||!/^\S+@\S+\.\S+$/.test(email)||!['pickup','correios','transportadora','uber','99'].includes(delivery)||!['cash','pix','card','assist'].includes(payment))return problem(res,400,'Confira nome, e-mail, entrega e pagamento');
+  if(customer_name.length<3||phone.length<10||phone.length>13||!/^\S+@\S+\.\S+$/.test(email)||!['correios','uber'].includes(delivery)||!['pix','card'].includes(payment))return problem(res,400,'Confira nome, e-mail, entrega e pagamento');
   const assist=['uber','99'].includes(delivery);
   const pixCpf=payment==='pix'?str(data.pixCpf,20).replace(/\D/g,''):'';
   if(payment==='pix'&&!commerce.validCPF(pixCpf))return problem(res,400,'Informe um CPF valido para gerar o Pix');
-  if(delivery!=='pickup'&&(cep.length!==8||address.length<8))return problem(res,400,'Informe endereço completo e CEP');
-  if(payment==='cash'&&delivery!=='pickup'||payment==='assist')return problem(res,400,'Pagamento incompatível com a entrega');
+  if(cep.length!==8||address.length<8)return problem(res,400,'Informe endereço completo e CEP');
   if(['pix','card'].includes(payment)&&!commerce.configured(conf))return problem(res,503,'Pagamento online indisponível. Configure Mercado Pago e uma URL HTTPS no painel.');
-  let freight=delivery==='pickup'?0:null,shippingService=delivery==='pickup'?'Retirada na loja':assist?'Corrida a combinar separadamente (Uber/99)':'';
-  if(delivery==='correios'||delivery==='transportadora'){
+  let freight=null,shippingService=assist?'Corrida a combinar separadamente (Uber/99)':'';
+  if(delivery==='correios'){
    if(!conf('MELHOR_ENVIO_TOKEN')||!/^\d{8}$/.test(conf('ORIGIN_CEP')))return problem(res,503,'Cotação indisponível: configure Melhor Envio e CEP de origem no painel.');
    const entry=liveQuotes.get(hash(str(data.quoteId,80)));
-   if(!entry||Date.now()-entry.created>600000||entry.fingerprint!==itemsFingerprint(items,cep)||!(/jadlog|buslog|j\s*&\s*t|\bjet\b|pegaki|ponto parceiro/i).test(entry.carrier))return problem(res,400,'Selecione uma cotação válida de transportadora habilitada para perfumes');
+   if(!entry||Date.now()-entry.created>600000||entry.fingerprint!==itemsFingerprint(items,cep)||!/^correios$/i.test(entry.carrier)||items.some(({p})=>p.category==='perfumes'))return problem(res,400,'Selecione uma cotação válida dos Correios para os produtos e CEP informados');
    freight=entry.cost;shippingService=entry.carrier+' · '+entry.service;
   }
   const subtotal=Math.round(items.reduce((acc,x)=>acc+x.p.price*x.qty,0)*100)/100;
@@ -333,7 +327,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const marketingOptIn=data.marketingOptIn===true || data.marketingOptIn==='on';
   await db.transaction(async()=>{
    await db.prepare('INSERT INTO orders(id,public_token_hash,created,status,customer_name,phone,customer_email,cep,address,delivery,payment,items_json,subtotal,shipping_cost,shipping_note,shipping_service,mp_preference_id,marketing_opt_in) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(id,hash(token),created,'pedido_criado',customer_name,phone,email,delivery==='pickup'?'':cep,delivery==='pickup'?'':address,delivery,payment,JSON.stringify(snapshot),subtotal,freight,assist?'Mercadoria paga online; corrida Uber/99 NÃO incluída no total. Negociar por WhatsApp após pagamento aprovado':delivery==='pickup'?'Retirada sem frete; '+(conf('SHOP_ADDRESS')||'endereço a informar'):'Melhor Envio · cotação selecionada',shippingService,mpPreferenceId,marketingOptIn);
+    .run(id,hash(token),created,'pedido_criado',customer_name,phone,email,cep,address,delivery,payment,JSON.stringify(snapshot),subtotal,freight,assist?'Mercadoria paga online; corrida Uber/99 NÃO incluída no total. Negociar por WhatsApp após pagamento aprovado':'Correios via Melhor Envio · cotação selecionada',shippingService,mpPreferenceId,marketingOptIn);
    // Uma compra sem marcar a opção NUNCA concede permissão para marketing.
    // Um opt-in registrado anteriormente não é apagado por uma compra posterior.
    await db.prepare(`INSERT INTO customers(email,name,phone,marketing_opt_in,marketing_consent_at,first_order_at,last_order_at,last_order_id)
@@ -362,9 +356,8 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
    }
    if(!pix.qrCode)return json(res,201,{reference:id,token,mode:'pix-retry',diagnostic:'MP_QR_PENDING',notice:'Pedido registrado. Aguarde e tente consultar novamente o código Pix.'});
   }
-  if(payment==='cash')await sendTransactional(id,'created');
-  return json(res,201,{reference:id,token,mode:payment==='pix'?'pix':payment==='card'?'online':'pickup-cash',pix,checkoutUrl,
-   notice:assist?'Custo da corrida Uber/99 nao incluido; combine apos o pagamento aprovado.':payment==='cash'?'Pedido registrado. Pague na loja quando retirar.':payment==='pix'?'Pague pelo QR Code ou Pix Copia e Cola. A confirmacao sera automatica.':'Pagamento por cartao no ambiente seguro do Mercado Pago.'});
+    return json(res,201,{reference:id,token,mode:payment==='pix'?'pix':'online',pix,checkoutUrl,
+   notice:assist?'Custo da corrida Uber/99 nao incluido; combine apos o pagamento aprovado.':payment==='pix'?'Pague pelo QR Code ou Pix Copia e Cola. A confirmacao sera automatica.':'Pagamento por cartao no ambiente seguro do Mercado Pago.'});
  }
  if(route==='/api/orders/status'&&method==='GET'){
  if(!rate(req,'track',35,60000))return problem(res,429,'Muitas consultas. Aguarde um minuto');
@@ -466,6 +459,10 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   const result=(await db.prepare('DELETE FROM categories WHERE id=?').run(catEdit[1]));return result.changes?json(res,200,{ok:true}):problem(res,404,'Categoria não encontrada');
  }
  if(route==='/api/admin/orders'&&method==='GET')return json(res,200,await management.findOrders(db,u.searchParams));
+ if(route==='/api/admin/launch-check'&&method==='GET'){
+  const catalog=await db.prepare("SELECT COUNT(*) FILTER(WHERE active=1)::int visible,COUNT(*) FILTER(WHERE active=1 AND (stock IS NULL OR stock<1))::int unavailable,COUNT(*) FILTER(WHERE active=1 AND (weight IS NULL OR weight<=0 OR width IS NULL OR width<=0 OR height IS NULL OR height<=0 OR length IS NULL OR length<=0))::int missing_dimensions,COUNT(*) FILTER(WHERE active=1 AND (image IS NULL OR image=''))::int missing_photos,COUNT(*) FILTER(WHERE active=1 AND category='perfumes')::int perfumes FROM products").get();
+  return json(res,200,{paymentReady:paymentReadiness.ready,paymentReason:paymentReadiness.reason,checkoutEnabled:process.env.MAHACH_ENABLE_CHECKOUT==='true'&&paymentReadiness.ready,shippingConfigured:!!(conf('MELHOR_ENVIO_TOKEN')&&/^\d{8}$/.test(conf('ORIGIN_CEP'))),shippingSandbox:conf('MELHOR_ENVIO_SANDBOX')==='true',emailConfigured:!!(conf('RESEND_API_KEY')&&conf('MAIL_FROM')&&conf('ADMIN_EMAIL')),imageStorage:imageStorageStatus(),catalog});
+ }
  if(route==='/api/admin/dashboard'&&method==='GET')return json(res,200,await management.dashboard(db,u.searchParams));
  const mailRetry=route.match(/^\/api\/admin\/orders\/(MH-[A-Z0-9]+)\/notify$/);
  if(mailRetry&&method==='POST'){

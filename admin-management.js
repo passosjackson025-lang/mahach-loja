@@ -26,6 +26,11 @@ async function dashboard(db,params){
  const paid="payment_status='aprovado' AND status<>'cancelado'";
  const summary=await db.prepare(`SELECT COUNT(*)::int orders,COUNT(*) FILTER(WHERE ${paid})::int paid_orders,COALESCE(SUM(subtotal+COALESCE(shipping_cost,0)) FILTER(WHERE ${paid}),0)::float8 revenue,COUNT(*) FILTER(WHERE ${paid} AND delivery<>'pickup' AND status NOT IN ('enviado','concluido'))::int awaiting_shipment FROM orders WHERE ${range}`).get(...args);
  summary.average_order=summary.paid_orders?Math.round(summary.revenue/summary.paid_orders*100)/100:0;
+ const duration=Math.round((Date.parse(end)-Date.parse(start))/86400000)+1;
+ const previousEnd=new Date(Date.parse(start+'T12:00:00Z')-86400000).toISOString().slice(0,10),previousStart=new Date(Date.parse(start+'T12:00:00Z')-duration*86400000).toISOString().slice(0,10);
+ const previous=await db.prepare(`SELECT COUNT(*)::int orders,COUNT(*) FILTER(WHERE ${paid})::int paid_orders,COALESCE(SUM(subtotal+COALESCE(shipping_cost,0)) FILTER(WHERE ${paid}),0)::float8 revenue FROM orders WHERE ${range}`).get(previousStart,previousEnd);
+ previous.average_order=previous.paid_orders?Math.round(previous.revenue/previous.paid_orders*100)/100:0;
+ const paymentMethods=await db.prepare(`SELECT payment,COUNT(*)::int count,COALESCE(SUM(subtotal+COALESCE(shipping_cost,0)),0)::float8 revenue FROM orders WHERE ${range} AND ${paid} GROUP BY payment ORDER BY revenue DESC`).all(...args);
  const daily=await db.prepare(`SELECT to_char(created::timestamptz AT TIME ZONE '${ZONE}','YYYY-MM-DD') AS day,COUNT(*)::int orders,COALESCE(SUM(subtotal+COALESCE(shipping_cost,0)) FILTER(WHERE ${paid}),0)::float8 revenue FROM orders WHERE ${range} GROUP BY 1 ORDER BY 1`).all(...args);
  const statuses=await db.prepare(`SELECT status,COUNT(*)::int count FROM orders WHERE ${range} GROUP BY status ORDER BY count DESC,status`).all(...args);
  const topProducts=await db.prepare(`SELECT item->>'id' id,item->>'name' name,SUM((item->>'qty')::int)::int quantity,SUM((item->>'qty')::int*(item->>'unit_price')::numeric)::float8 revenue FROM orders CROSS JOIN LATERAL jsonb_array_elements(items_json::jsonb) item WHERE ${range} AND ${paid} GROUP BY 1,2 ORDER BY quantity DESC,name LIMIT 5`).all(...args);
@@ -33,7 +38,7 @@ async function dashboard(db,params){
  const lowStock=await db.prepare('SELECT id,name,sku,stock FROM products WHERE active=1 AND stock<=5 ORDER BY stock,name LIMIT 8').all();
  const inventory=await db.prepare('SELECT COUNT(*)::int products,COUNT(*) FILTER(WHERE active=1)::int visible,COUNT(*) FILTER(WHERE active=1 AND stock=0)::int out_of_stock,COUNT(*) FILTER(WHERE active=1 AND stock>0 AND stock<=5)::int low_stock,COUNT(*) FILTER(WHERE active=1 AND stock IS NULL)::int unknown_stock FROM products').get();
  const days=new Map(daily.map(x=>[x.day,x]));const sales=[];for(let t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z');t+=86400000){const day=new Date(t).toISOString().slice(0,10);sales.push(days.get(day)||{day,revenue:0,orders:0})}
- return {from:start,to:end,timeZone:ZONE,summary,daily:sales,statuses,topProducts,recent,lowStock,inventory};
+ return {from:start,to:end,timeZone:ZONE,summary,previous:{...previous,from:previousStart,to:previousEnd},paymentMethods,daily:sales,statuses,topProducts,recent,lowStock,inventory};
 }
 async function findOrders(db,params){
  const q=String(params.get('q')||'').trim().slice(0,160),status=params.get('status')||'',payment=params.get('paymentStatus')||'',page=Math.max(1,Math.min(100000,parseInt(params.get('page'),10)||1));

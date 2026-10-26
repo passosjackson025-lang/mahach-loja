@@ -1,7 +1,7 @@
 'use strict';
 // Testes offline: Neon e pagamentos simulados. Nunca emite cobranças reais.
 const assert=require('node:assert/strict'),crypto=require('node:crypto'),Module=require('node:module');
-const original=Module._load;
+const original=Module._load,originalFetch=global.fetch;let freightCalls=0;global.fetch=async(url,options)=>String(url).startsWith('https://melhorenvio.com.br/api/')?(freightCalls++,new Response(JSON.stringify([{name:'PAC',company:{name:'Correios'},price:'18.50',delivery_time:5},{name:'SEDEX',company:{name:'Correios'},price:'29.90',delivery_time:2},{name:'.Package',company:{name:'Jadlog'},price:'17.00',delivery_time:3}]),{status:200})):originalFetch(url,options);
 let customer=null,order=null,stock=3,approved=0;
 const adminPassword='senha-do-teste-123',salt='a'.repeat(32),adminHash=crypto.scryptSync(adminPassword,salt,64).toString('hex');
 const sessions=[];
@@ -52,7 +52,7 @@ const {server,ready,db}=require('../server');
 async function main(){await ready;await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
  try{
   let r=await fetch(base+'/api/admin/customers');assert.equal(r.status,401,'Clientes devem ser privados');
-  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'pix',pixCpf:'52998224725',marketingOptIn:true,items:[{id:'perfume-123',qty:1}]})});
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'uber',cep:'01001000',address:'Praça da Sé, 10 - Centro - São Paulo/SP',payment:'pix',pixCpf:'52998224725',marketingOptIn:true,items:[{id:'perfume-123',qty:1}]})});
   assert.equal(r.status,201);const out=await r.json();assert.equal(out.mode,'pix');assert.equal(out.pix.qrCode,'PIX-TESTE-NAO-PAGAVEL');assert.equal(order.mp_payment_id,'123456789');
   assert.ok(customer.marketing_opt_in);assert.equal(customer.name,'Pessoa Teste');assert.equal(order.marketing_opt_in,true);
   assert.equal(order.customer_email,'cliente@exemplo.test');assert.equal(stock,3);
@@ -64,27 +64,34 @@ async function main(){await ready;await new Promise(r=>server.listen(0,'127.0.0.
   r=await webhook();assert.equal(r.status,200);assert.equal(stock,2,'Webhook repetido não deve debitar o estoque');assert.equal(approved,1);
   r=await fetch(base+'/api/payments/status',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({reference:out.reference,token:out.token})});
   assert.equal((await r.json()).paymentStatus,'aprovado');
-  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'card',items:[{id:'perfume-123',qty:1}]})});
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'uber',cep:'01001000',address:'Praça da Sé, 10 - Centro - São Paulo/SP',payment:'card',items:[{id:'perfume-123',qty:1}]})});
   assert.equal(r.status,201);const card=await r.json();assert.equal(card.mode,'online');assert.ok(card.checkoutUrl.startsWith('https://www.mercadopago.com.br/'));
   const preference=commerce.createPreference;let preferenceCalls=0;commerce.createPreference=async(...args)=>{if(++preferenceCalls===1)throw Object.assign(Error('falha simulada'),{diagnostic:'MP_HTTP_401_7'});return preference(...args)};
-  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'card',items:[{id:'perfume-123',qty:1}]})});assert.equal(r.status,201);const savedCard=await r.json();assert.equal(savedCard.mode,'card-retry');assert.ok(savedCard.token);
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'uber',cep:'01001000',address:'Praça da Sé, 10 - Centro - São Paulo/SP',payment:'card',items:[{id:'perfume-123',qty:1}]})});assert.equal(r.status,201);const savedCard=await r.json();assert.equal(savedCard.mode,'card-retry');assert.ok(savedCard.token);
   const retryCard=()=>fetch(base+'/api/payments/card/retry',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({reference:savedCard.reference,token:savedCard.token})});
   r=await retryCard();assert.equal(r.status,200);assert.ok((await r.json()).checkoutUrl);r=await retryCard();assert.equal(r.status,200);assert.equal(preferenceCalls,2,'a preferência do mesmo pedido deve ser reutilizada');assert.equal(order.id,savedCard.reference);
   order.status='cancelado';r=await retryCard();assert.equal(r.status,409);commerce.createPreference=preference;
   r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'cash',items:[{id:'perfume-123',qty:1}]})});
-  assert.equal(r.status,201);assert.equal((await r.json()).mode,'pickup-cash');assert.equal(order.payment_status,'pendente');
+  assert.equal(r.status,400,'Retirada e pagamento presencial não devem criar novos pedidos');assert.equal(order.id,savedCard.reference);
   r=await fetch(base+'/api/admin/login',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({email:'admin@exemplo.test',password:adminPassword})});
   assert.equal(r.status,200);const cookie=r.headers.get('set-cookie').split(';')[0],info=await r.json();
   r=await fetch(base+'/api/admin/customers',{headers:{Cookie:cookie}});assert.equal(r.status,200);const list=await r.json();assert.equal(list.customers.length,1);
   assert.equal(list.customers[0].email,'cliente@exemplo.test');
   r=await fetch(base+'/api/admin/customers/'+encodeURIComponent(customer.email)+'/optout',{method:'POST',headers:{Cookie:cookie,Origin:base,'x-csrf-token':info.csrf,'Content-Type':'application/json'},body:'{}'});
   assert.equal(r.status,200);assert.equal(customer.marketing_opt_in,false);
+  // Os dois modos novos não aceitam retirada. Correios não pode mascarar outra transportadora.
+  process.env.MELHOR_ENVIO_TOKEN='frete-local-simulado';process.env.ORIGIN_CEP='01001000';
+  const quote=()=>fetch(base+'/api/shipping/quote',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({cep:'01310930',items:[{id:'perfume-123',qty:1}]})});
+  r=await quote();assert.equal(r.status,422);assert.equal(freightCalls,0,'Não cotar perfume em serviço incompatível');
+  product.category='corpo';r=await quote();assert.equal(r.status,200);const rates=await r.json();assert.equal(rates.options.length,2);assert.ok(rates.options.every(o=>o.carrier==='Correios'));
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'correios',payment:'card',cep:'01310930',address:'Av. Paulista, 10 - São Paulo/SP',quoteId:rates.options[0].quoteId,items:[{id:'perfume-123',qty:1}]})});assert.equal(r.status,201);assert.equal(order.shipping_cost,18.5);assert.equal(order.delivery,'correios');
+  product.category='perfumes';
   // Modo de teste: o publico continua sem checkout, mas um admin autenticado pode comprar.
   process.env.MAHACH_ENABLE_CHECKOUT='false';
   process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE='true';
   r=await fetch(base+'/api/store/status');assert.equal((await r.json()).checkoutEnabled,false);
   r=await fetch(base+'/api/store/status',{headers:{Cookie:cookie}});assert.equal((await r.json()).checkoutEnabled,true);
-  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'pix',items:[{id:'perfume-123',qty:1}]})});
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'uber',cep:'01001000',address:'Praça da Sé, 10 - Centro - São Paulo/SP',payment:'pix',items:[{id:'perfume-123',qty:1}]})});
   assert.equal(r.status,503,'Visitante nao deve conseguir criar pedido no modo privado');
   // A autorizacao HMAC do webhook funciona mesmo sem sessao de administrador.
   r=await webhook();assert.equal(r.status,200);

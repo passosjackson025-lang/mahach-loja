@@ -24,7 +24,7 @@ async function createPreference(conf,order,items,token){
  const origin=httpsSite(String(conf('PUBLIC_SITE_URL')||'').trim());
  const back=origin+'/finalizado.html?reference='+encodeURIComponent(order.id);
  const lineItems=items.map(i=>({id:i.id,title:i.name.slice(0,100),quantity:i.qty,unit_price:Number(i.unit_price),currency_id:'BRL'}));
- if(order.shipping_cost>0)lineItems.push({id:'frete',title:'Frete via transportadora',quantity:1,unit_price:Number(order.shipping_cost),currency_id:'BRL'});
+ if(order.shipping_cost>0)lineItems.push({id:'frete',title:'Frete · Correios',quantity:1,unit_price:Number(order.shipping_cost),currency_id:'BRL'});
  const body={items:lineItems,external_reference:order.id,payer:{name:order.customer_name,email:order.customer_email},back_urls:{success:back,pending:back,failure:back},auto_return:'approved',notification_url:origin+'/api/payments/mercadopago/webhook',statement_descriptor:'LA COUR',payment_methods:{excluded_payment_types:(order.payment==='pix'?['credit_card','debit_card','ticket','prepaid_card']:['bank_transfer','ticket','atm','prepaid_card','debit_card']).map(id=>({id}))}};
  const res=await fetch(MP+'/checkout/preferences',{method:'POST',headers:{Authorization:'Bearer '+accessToken(conf),'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(18000)});
  const response=await res.json().catch(()=>({}));if(!res.ok||!/^https:\/\//.test(response.init_point||''))throw Object.assign(new Error('Mercado Pago não conseguiu iniciar o checkout.'),{status:502,diagnostic:providerDiagnostic(res.status,response)});
