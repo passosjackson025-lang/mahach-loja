@@ -49,6 +49,7 @@ async function bootstrap(){
  if(res.rows.length!==5)throw Error('Staging incompleto no Neon: importe e valide as cinco tabelas antes de iniciar o servidor');
  // O catálogo pode estar vazio enquanto a loja cadastra os produtos manualmente.
  // A validação das tabelas acima continua obrigatória; nunca reimportar produtos aqui.
+ await pool.query("ALTER TABLE mahach_stage.products ADD COLUMN IF NOT EXISTS audience TEXT NOT NULL DEFAULT ''");
  // As sessões de login são novas, nunca copiadas do SQLite.
  await pool.query(`CREATE TABLE IF NOT EXISTS mahach_stage.sessions (
    token_hash TEXT PRIMARY KEY,email TEXT NOT NULL REFERENCES mahach_stage.admins(email),csrf TEXT NOT NULL,expires BIGINT NOT NULL

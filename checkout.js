@@ -8,7 +8,7 @@
  <p class="checkout-intro">Confira seus dados, a entrega e o pagamento. No Pix, o QR Code aparece após registrar o pedido.</p>
  <form id="checkoutForm" class="mahach-checkout-layout">
   <div class="mahach-checkout-main">
-  <div class="checkout-fields"><h3 class="mahach-section-heading"><span class="mahach-section-index" aria-hidden="true">01</span><span>Dados para sua compra</span></h3><label>Seu nome completo<input name="name" autocomplete="name" minlength="3" maxlength="120" required></label><label>WhatsApp com DDD<input name="phone" autocomplete="tel" inputmode="tel" pattern="[0-9()+\\s-]{10,20}" placeholder="(11) 99999-9999" required></label><label>E-mail para confirmação do pedido<input type="email" name="email" autocomplete="email" maxlength="200" required></label></div>
+  <div class="checkout-fields"><h3 class="mahach-section-heading"><span class="mahach-section-index" aria-hidden="true">01</span><span>Dados para sua compra</span></h3><label>Seu nome completo<input name="name" autocomplete="name" minlength="3" maxlength="120" required></label><label>WhatsApp com DDD<input name="phone" autocomplete="tel" inputmode="tel" type="tel" minlength="10" maxlength="20" placeholder="(11) 99999-9999" required></label><label>E-mail para confirmação do pedido<input type="email" name="email" autocomplete="email" maxlength="200" required></label></div>
   <fieldset class="mahach-delivery"><legend><span class="mahach-section-index" aria-hidden="true">02</span><span>Tipo de entrega</span></legend><div class="checkout-options">
    <label><input type="radio" name="delivery" value="pickup" checked> Retirar na loja <small>Sem frete</small></label>
    <label><input type="radio" name="delivery" value="transportadora"> Transportadora <small>Calcular frete</small></label>
@@ -49,7 +49,7 @@
    <button type="button" id="pixRetryButton" class="quote-button" hidden>Tentar carregar o Pix novamente</button>
    <p id="pixStatus" role="status" aria-live="polite">Aguardando confirmacao do Mercado Pago...</p>
   </section>
-  <a id="orderTrack" class="consult-link" target="_blank" rel="noopener noreferrer" hidden>Acompanhar entrega</a></div>
+  <section id="orderCard" hidden aria-label="Pagamento por cartão"><p>Seu pedido está salvo. Continue no ambiente seguro do Mercado Pago.</p><button type="button" id="cardRetryButton" class="quote-button">Continuar para pagamento por cartão ↗</button><p id="cardStatus" role="status" aria-live="polite"></p></section><a id="paymentSupport" class="consult-link" target="_blank" rel="noopener noreferrer" hidden>Falar com a LA COUR sobre este pedido ↗</a><a id="orderTrack" class="consult-link" target="_blank" rel="noopener noreferrer" hidden>Acompanhar entrega</a></div>
  </div></div>
   <aside class="mahach-checkout-side" aria-label="Resumo do pedido">
    <div class="mahach-side-top"><div class="mahach-side-label">LA COUR · SEU PEDIDO</div><h3>Seu pedido</h3><p id="mahachSummaryCount"></p></div>
@@ -69,6 +69,7 @@
  function syncAvailability(){if(!d.open)return;form.hidden=!checkoutEnabled;side.hidden=!checkoutEnabled;previewNotice.hidden=checkoutEnabled;d.classList.toggle('mahach-preview',!checkoutEnabled);}
  fetch('/api/store/status',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{checkoutEnabled=v?.checkoutEnabled===true;syncAvailability()}).catch(()=>{});
  fetch('/api/meta',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(x=>{pickupAddress=String(x?.pickupAddress||'');onlinePayments=x?.onlinePayments===true;refreshDelivery()}).catch(()=>{});
+ form.elements.phone.addEventListener('input',()=>form.elements.phone.setCustomValidity(''));
  d.querySelector('[data-checkout-close]').addEventListener('click',()=>d.close());
  d.addEventListener('close',()=>{if(pixPoll)clearInterval(pixPoll);pixPoll=null;if(!document.querySelector('dialog[open]'))document.body.classList.remove('modal-open')});
  const currency=n=>Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -96,7 +97,7 @@
  window.openCheckout=function(bag,map){
   if(pixPoll)clearInterval(pixPoll);pixPoll=null;activeOrder=null;
   d.classList.remove('mahach-success');selectedQuote='';selectedCost=null;form.reset();clearTimeout(cepTimer);++cepRequest;q('cepLookupStatus').textContent='';
-  q('orderPix').hidden=true;q('pixQrImage').hidden=true;q('pixQrImage').removeAttribute('src');q('pixCopyValue').value='';q('pixCopyLabel').hidden=true;q('pixUnavailableMessage').hidden=true;q('pixCopyButton').hidden=true;q('pixRetryButton').hidden=true;
+  q('orderCard').hidden=true;q('paymentSupport').hidden=true;q('orderPix').hidden=true;q('pixQrImage').hidden=true;q('pixQrImage').removeAttribute('src');q('pixCopyValue').value='';q('pixCopyLabel').hidden=true;q('pixUnavailableMessage').hidden=true;q('pixCopyButton').hidden=true;q('pixRetryButton').hidden=true;
   d.querySelector('.checkout-head-sub').hidden=false;q('checkoutTitle').textContent='Finalizar compra.';q('orderHeading').textContent='Pedido registrado';q('orderHeading').hidden=false;q('orderReference').hidden=false;q('orderInstructions').hidden=false;q('orderTrack').hidden=true;q('orderPix').hidden=true;q('orderSuccess').dataset.phase='';q('orderSuccess').hidden=true;d.querySelector('.checkout-steps').hidden=false;d.querySelector('.checkout-intro').hidden=false;
   items=Object.entries(bag).map(([id,qty])=>({id,qty,p:map.get(id)})).filter(x=>x.p);
   renderSummaryProducts();
@@ -184,7 +185,7 @@
  });
  function showRegisteredOrder(result){
   activeOrder={reference:result.reference,token:result.token};
-  const isPix=result.mode==='pix'||result.mode==='pix-retry';
+  const isPix=result.mode==='pix'||result.mode==='pix-retry';q('orderCard').hidden=result.mode!=='card-retry';q('cardStatus').textContent=result.mode==='card-retry'?(result.notice||'Seu pedido está salvo.') : '';q('paymentSupport').href='https://wa.me/5511940856397?text='+encodeURIComponent('Olá, LA COUR! Preciso de ajuda com o pagamento do pedido '+result.reference+'.');q('paymentSupport').hidden=result.mode!=='card-retry';
   form.hidden=true;side.hidden=true;d.classList.add('mahach-success');q('orderSuccess').hidden=false;d.querySelector('.checkout-steps').hidden=true;d.querySelector('.checkout-intro').hidden=true;
   d.querySelector('.checkout-head-sub').hidden=true;
   q('checkoutTitle').textContent=isPix?'Pagamento Pix':'Pedido registrado';
@@ -206,19 +207,22 @@
   q('orderHeading').hidden=false;q('orderHeading').textContent='Pagamento aprovado!';
   q('orderReference').hidden=false;
   q('orderInstructions').hidden=false;q('orderInstructions').textContent='Pagamento confirmado pelo Mercado Pago. O pedido segue agora para a loja. Acompanhe o preparo e o envio na página do seu pedido.';
-  q('orderPix').hidden=true;q('orderTrack').hidden=false;
+  q('orderPix').hidden=true;q('orderCard').hidden=true;q('paymentSupport').hidden=true;q('orderTrack').hidden=false;
   if(pixPoll)clearInterval(pixPoll);pixPoll=null;
   d.scrollTop=0;
  }
  function showPixPending(message,diagnostic){
-  const section=q('orderPix');section.hidden=false;
+  q('orderPix').hidden=false;
   const img=q('pixQrImage');img.hidden=true;img.removeAttribute('src');
   q('pixCopyValue').value='';q('pixCopyLabel').hidden=true;q('pixCopyButton').hidden=true;
-  q('pixRetryButton').hidden=false;q('pixUnavailableMessage').hidden=false;
-  q('pixStatus').textContent='Ainda não foi possível carregar os dados do Pix.';
-  if(diagnostic && /^[A-Z0-9_-]{3,90}$/.test(String(diagnostic)))q('pixStatus').textContent+=' Referência técnica: '+diagnostic+'.';
-  q('orderSuccess').dataset.phase='payment';
+  const authentication=/^MP_HTTP_(401|403)(_|$)/.test(String(diagnostic||''));
+  q('pixRetryButton').hidden=authentication;q('pixUnavailableMessage').hidden=false;
+  q('pixUnavailableMessage').textContent=authentication?'Não foi possível iniciar o Pix. Seu pedido está salvo; fale com a LA COUR para receber ajuda.':'Seu pedido está salvo. Tente carregar o Pix novamente sem criar outro pedido.';
+  q('pixStatus').textContent='Pedido '+(activeOrder?.reference||'')+'. Nenhum pagamento foi confirmado.';
+  q('paymentSupport').hidden=false;q('orderSuccess').dataset.phase='payment';
  }
+ function goToCardCheckout(value){const url=new URL(value||'');if(url.protocol!=='https:'||!/(^|\.)mercadopago\.com(\.br)?$/.test(url.hostname))throw Error('Não foi possível abrir o pagamento. Seu pedido está salvo; fale com a LA COUR.');location.assign(url.href)}
+ q('cardRetryButton').addEventListener('click',async()=>{if(!activeOrder)return;const button=q('cardRetryButton');button.disabled=true;q('cardStatus').textContent='Abrindo o pagamento seguro…';try{const response=await fetch('/api/payments/card/retry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(activeOrder)});const result=await response.json();if(!response.ok)throw Error(result.error||'Não foi possível abrir o cartão.');if(result.paid){showPaymentConfirmed();return}goToCardCheckout(result.checkoutUrl)}catch(e){q('cardStatus').textContent=e.message}finally{button.disabled=false}});
  function renderPix(pix){
   const section=q('orderPix');section.hidden=false;
   const copy=String(pix?.qrCode||''),base64=String(pix?.qrCodeBase64||'');
@@ -259,14 +263,15 @@
   const b=q('pixRetryButton');b.disabled=true;q('pixStatus').textContent='Consultando o mesmo Pix...';
   try{
    const response=await fetch('/api/payments/pix/retry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...activeOrder,pixCpf:form.elements.pixCpf.value})});
-   const data=await response.json();if(!response.ok)throw Error((data.error||'Nao foi possivel gerar Pix')+(data.diagnostic?' Referência técnica: '+String(data.diagnostic).slice(0,90):''));
+   const data=await response.json();if(!response.ok)throw Object.assign(Error(data.error||'Não foi possível gerar o Pix.'),{diagnostic:data.diagnostic});
    if(data.paid){showPaymentConfirmed();return;}
    renderPix(data.pix);
-  }catch(err){showPixPending(err.message||'Não foi possível gerar o Pix agora. Tente novamente para o mesmo pedido.');}finally{b.disabled=false}
+  }catch(err){showPixPending(err.message,err.diagnostic);}finally{b.disabled=false}
  });
  form.addEventListener('submit',async e=>{
   e.preventDefault();if(!checkoutEnabled)return;
   updateSubmitLabel(); // Campo CPF precisa estar visivel antes da validacao do navegador.
+  const phone=form.elements.phone,digits=phone.value.replace(/\D/g,'');phone.setCustomValidity(digits.length>=10&&digits.length<=13?'':'Informe um telefone com DDD válido.');
   if(!form.reportValidity())return;
   const delivery=form.elements.delivery.value,payment=form.elements.payment.value,error=q('checkoutError');error.hidden=true;
   if(delivery==='transportadora'&&!selectedQuote){error.textContent='Selecione um frete antes de pagar.';error.hidden=false;return}
@@ -280,11 +285,7 @@
    // A referência e o token permanecem no navegador; não entram no URL enviado ao Mercado Pago.
    try{sessionStorage.setItem('mahach-order-token-'+result.reference,result.token);sessionStorage.setItem('mahach-last-order',JSON.stringify({reference:result.reference,token:result.token}))}catch{}
    try{localStorage.removeItem('mahach-bag')}catch{}
-   if(result.mode==='online'){
-    const url=new URL(result.checkoutUrl||'');
-    if(url.protocol!=='https:'||!/(^|\.)mercadopago\.com(\.br)?$/.test(url.hostname))throw Error('Link de pagamento invalido. O pedido foi registrado; entre em contato com a loja.');
-    window.location.assign(url.href);return;
-   }
+   if(result.mode==='online'){goToCardCheckout(result.checkoutUrl);return;}
    showRegisteredOrder(result);
    if(result.mode==='pix')renderPix(result.pix);
    else if(result.mode==='pix-retry'){

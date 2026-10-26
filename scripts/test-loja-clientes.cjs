@@ -66,6 +66,11 @@ async function main(){await ready;await new Promise(r=>server.listen(0,'127.0.0.
   assert.equal((await r.json()).paymentStatus,'aprovado');
   r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'card',items:[{id:'perfume-123',qty:1}]})});
   assert.equal(r.status,201);const card=await r.json();assert.equal(card.mode,'online');assert.ok(card.checkoutUrl.startsWith('https://www.mercadopago.com.br/'));
+  const preference=commerce.createPreference;let preferenceCalls=0;commerce.createPreference=async(...args)=>{if(++preferenceCalls===1)throw Object.assign(Error('falha simulada'),{diagnostic:'MP_HTTP_401_7'});return preference(...args)};
+  r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'card',items:[{id:'perfume-123',qty:1}]})});assert.equal(r.status,201);const savedCard=await r.json();assert.equal(savedCard.mode,'card-retry');assert.ok(savedCard.token);
+  const retryCard=()=>fetch(base+'/api/payments/card/retry',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({reference:savedCard.reference,token:savedCard.token})});
+  r=await retryCard();assert.equal(r.status,200);assert.ok((await r.json()).checkoutUrl);r=await retryCard();assert.equal(r.status,200);assert.equal(preferenceCalls,2,'a preferência do mesmo pedido deve ser reutilizada');assert.equal(order.id,savedCard.reference);
+  order.status='cancelado';r=await retryCard();assert.equal(r.status,409);commerce.createPreference=preference;
   r=await fetch(base+'/api/orders',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({name:'Pessoa Teste',phone:'11999999999',email:'cliente@exemplo.test',delivery:'pickup',payment:'cash',items:[{id:'perfume-123',qty:1}]})});
   assert.equal(r.status,201);assert.equal((await r.json()).mode,'pickup-cash');assert.equal(order.payment_status,'pendente');
   r=await fetch(base+'/api/admin/login',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({email:'admin@exemplo.test',password:adminPassword})});

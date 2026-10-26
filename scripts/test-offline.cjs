@@ -5,6 +5,7 @@ const Module=require('node:module');
 const crypto=require('node:crypto');
 const original=Module._load;
 const history=[];
+const unreadyPayments=process.argv.includes('--payment-unready');
 const emptyCatalog=process.argv.includes('--empty-catalog'),catalogCount=emptyCatalog?0:1770;
 const salt='abcdef0123456789abcdef0123456789';
 const password='TestPassword_12345!';
@@ -38,6 +39,7 @@ class Pool {
 Module._load=function(id,parent,isMain){if(id==='pg')return {Pool,types:{setTypeParser(){}}};return original.call(this,id,parent,isMain)};
 process.env.DATABASE_URL='postgresql://test:abc@localhost/mock';
 process.env.MAHACH_SETTINGS_KEY='00'.repeat(32);
+if(unreadyPayments){process.env.MAHACH_ENABLE_CHECKOUT='true';process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE='true';require('../commerce-flows').validateConnection=async()=>({ready:false,reason:'test_credentials'})}
 async function main(){
  const {sqlize}=require('../pg-db');
  assert.equal(sqlize('SELECT * FROM products WHERE id=? AND active=1'),'SELECT * FROM mahach_stage."products" WHERE id=$1 AND active=1');
@@ -46,6 +48,7 @@ async function main(){
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const base='http://127.0.0.1:'+server.address().port;
  try{
+  if(unreadyPayments){const status=await (await fetch(base+'/api/store/status')).json();assert.equal(status.checkoutEnabled,false);assert.equal(status.testMode,true)}
   let r=await fetch(base+'/api/health');assert.equal(r.status,200);assert.equal((await r.json()).catalog,catalogCount);
   r=await fetch(base+'/api/products');assert.equal(r.status,200);const products=await r.json();assert.equal(products.total,catalogCount);assert.equal(products.products.length,emptyCatalog?0:1);
   if(emptyCatalog){r=await fetch(base+'/api/products/sample-1');assert.equal(r.status,404)}
@@ -60,6 +63,7 @@ async function main(){
   r=await fetch(base+'/api/admin/login',{method:'POST',headers:{'content-type':'application/json',Origin:base},body:JSON.stringify({email:'admin@example.test',password})});
   assert.equal(r.status,200);const token=(r.headers.get('set-cookie')||'').split(';')[0];const body=await r.json();assert.ok(body.csrf);
   r=await fetch(base+'/api/admin/session',{headers:{Cookie:token}});assert.equal(r.status,200);assert.equal((await r.json()).authenticated,true);
+  if(unreadyPayments){const status=await (await fetch(base+'/api/store/status',{headers:{Cookie:token}})).json();assert.equal(status.checkoutEnabled,true);assert.equal(status.testMode,true)}
   r=await fetch(base+'/api/admin/settings',{headers:{Cookie:token}});assert.equal(r.status,200);assert.ok(Array.isArray((await r.json()).fields));
   r=await fetch(base+'/api/admin/stats',{headers:{Cookie:token}});assert.equal(r.status,200);
   r=await fetch(base+'/api/admin/settings',{method:'PUT',headers:{Cookie:token,Origin:base,'content-type':'application/json','x-csrf-token':body.csrf},body:JSON.stringify({values:{WHATSAPP:'5511999998888'}})});assert.equal(r.status,503);

@@ -25,6 +25,7 @@ const ready=(async()=>{
  await management.updateStoreCategories(db);
  paymentReadiness=await commerce.validateConnection(conf);
  console.info('[Pagamentos LA COUR] '+paymentReadiness.reason);
+ const tokenField=settings.list().find(x=>x.key==='MERCADO_PAGO_ACCESS_TOKEN');console.info('[Pagamentos LA COUR] token_source_'+(tokenField?.source||'vazio'));
  console.info('[Admin LA COUR] writes_'+(process.env.MAHACH_ENABLE_ADMIN_WRITES==='true'?'enabled':'disabled'));
 })();
 function normalizeCatalogQuery(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
@@ -45,8 +46,9 @@ async function bodyCsv(req){if(!/^text\/csv(?:;|$)/i.test(req.headers['content-t
 function str(x,max=255){return typeof x==='string'?x.trim().slice(0,max):''}
 function number(x){const n=Number(x);return Number.isFinite(n)?n:NaN}
 async function validProduct(data){
- const p={id:str(data.id,80),name:str(data.name,220),description:str(data.description,10000),category:data.category==='beleza'?'corpo':str(data.category,64),brand:str(data.brand,100),family:str(data.family,85),image:secureUrl(str(data.image,1500)),sku:str(data.sku,80),price:number(data.price),stock:data.stock===''||data.stock===null||data.stock===undefined?null:Number(data.stock),active:data.active===false||data.active===0?0:1,weight:data.weight||null,width:data.width||null,height:data.height||null,length:data.length||null};
+ const p={id:str(data.id,80),name:str(data.name,220),description:str(data.description,10000),category:data.category==='beleza'?'corpo':str(data.category,64),brand:str(data.brand,100),family:str(data.family,85),audience:str(data.audience,20),image:secureUrl(str(data.image,1500)),sku:str(data.sku,80),price:number(data.price),stock:data.stock===''||data.stock===null||data.stock===undefined?null:Number(data.stock),active:data.active===false||data.active===0?0:1,weight:data.weight||null,width:data.width||null,height:data.height||null,length:data.length||null};
  if(!p.name||p.name.length<2||!p.category||!(await db.prepare('SELECT id FROM categories WHERE id=?').get(p.category))||!Number.isFinite(p.price)||p.price<0||p.price>100000)throw Object.assign(new Error('Confira nome, categoria e preço'),{status:400});
+ if(!['','masculino','feminino','unissex','infantil'].includes(p.audience))throw Object.assign(new Error('Público inválido'),{status:400});
  if(p.stock!==null&&(!Number.isInteger(p.stock)||p.stock<0))throw Object.assign(new Error('Estoque inválido'),{status:400});
  for(const m of ['weight','width','height','length']){if(p[m]!==null){p[m]=number(p[m]);if(!(p[m]>0&&p[m]<10000))throw Object.assign(new Error('Dimensão ou peso inválido'),{status:400})}}
  p.search_text=searchText(p);return p;
@@ -56,7 +58,7 @@ async function session(req){const token=cookies(req).mahach_session;if(!token||!
 async function logged(req,res){const s=await session(req);if(!s){problem(res,401,'Acesso restrito ao administrador');return null}return s}
 // A flag de teste NUNCA libera compras ao publico: exige sessao administrativa valida.
 async function checkoutAllowed(req){
- if(process.env.MAHACH_ENABLE_CHECKOUT==='true')return paymentReadiness.ready;
+ if(process.env.MAHACH_ENABLE_CHECKOUT==='true'&&paymentReadiness.ready)return true;
  return process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&!!(await session(req));
 }
 function checkOrigin(req){const o=req.headers.origin;const host=req.headers.host;if(!o||!host)return false;try{const u=new URL(o);return u.host===host&&(u.protocol==='http:'||u.protocol==='https:')}catch{return false}}
@@ -64,7 +66,7 @@ function canWrite(req,s){return checkOrigin(req)&&req.headers['x-csrf-token']===
 function cookieValue(req,value,maxAge=28800){const secure=(process.env.NODE_ENV==='production'||process.env.RENDER==='true'||!!process.env.RENDER_SERVICE_ID)?'; Secure':'';return `mahach_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`}
 const counters=new Map();
 function rate(req,key,max,window=60000){const ip=req.socket.remoteAddress||'local',n=Date.now(),k=`${key}:${ip}`,v=counters.get(k)||{time:n,count:0};if(n-v.time>window){v.time=n;v.count=0}v.count++;counters.set(k,v);if(counters.size>4000)for(const [k,v]of counters)if(n-v.time>3600000)counters.delete(k);return v.count<=max}
-function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku}}
+function productSummary(p){return {id:p.id,name:p.name,price:p.price,category:p.category,brand:p.brand,family:p.family,audience:p.audience||'',image:p.image,description:p.description,stock:p.stock,active:!!p.active,weight:p.weight,width:p.width,height:p.height,length:p.length,sku:p.sku}}
 const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.woff2':'font/woff2','.ttf':'font/ttf','.ico':'image/x-icon'};
 async function staticFile(req,res,url){
  let pathname;try{pathname=decodeURIComponent(url.pathname)}catch{return problem(res,400,'URL inválida')}
@@ -150,6 +152,18 @@ async function sendTransactional(orderId,kind){
  if(approved&&conf('ADMIN_EMAIL')&&!o.admin_email_sent){result.admin=await commerce.sendEmail(conf,conf('ADMIN_EMAIL'),'LA COUR: venda paga · '+o.id,summary+'<p>Pagamento verificado no Mercado Pago. Total: R$ '+total+'.</p>');if(result.admin.ok)(await db.prepare('UPDATE orders SET admin_email_sent=1 WHERE id=?').run(orderId))}
  return result;
 }
+async function cardCheckoutForOrder(reference,token){
+ return db.transaction(async()=>{
+  const o=await db.prepare('SELECT * FROM orders WHERE id=? AND public_token_hash=? FOR UPDATE').get(reference,hash(token));
+  if(!o||o.payment!=='card')throw Object.assign(Error('Pedido de cartão não encontrado'),{status:404});
+  if(o.payment_status==='aprovado')return {paid:true};
+  if(o.status==='cancelado')throw Object.assign(Error('Este pedido foi cancelado.'),{status:409});
+  if(o.mp_preference_id)return {checkoutUrl:'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id='+encodeURIComponent(o.mp_preference_id)};
+  const mp=await commerce.createPreference(conf,o,JSON.parse(o.items_json),token);
+  await db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(mp.preferenceId,o.id);
+  return {checkoutUrl:mp.checkoutUrl};
+ });
+}
 async function processVerifiedPayment(paymentId){
  const pay=await commerce.getVerifiedPayment(conf,paymentId),id=str(pay.external_reference,40);
  const o=await db.prepare('SELECT * FROM orders WHERE id=?').get(id);
@@ -187,7 +201,7 @@ async function processVerifiedPayment(paymentId){
 }
 async function api(req,res,u){const method=req.method, route=u.pathname;
  if(route==='/api/health'&&method==='GET')return json(res,200,{ok:true,catalog:(await db.prepare('SELECT COUNT(*) n FROM products WHERE active=1').get()).n});
- if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:await checkoutAllowed(req),paymentReady:paymentReadiness.ready,testMode:process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&process.env.MAHACH_ENABLE_CHECKOUT!=='true'},{'Cache-Control':'no-store'});
+ if(route==='/api/store/status'&&method==='GET')return json(res,200,{checkoutEnabled:await checkoutAllowed(req),paymentReady:paymentReadiness.ready,testMode:process.env.MAHACH_ENABLE_CHECKOUT_TEST_MODE==='true'&&!(process.env.MAHACH_ENABLE_CHECKOUT==='true'&&paymentReadiness.ready)},{'Cache-Control':'no-store'});
  if(route==='/api/meta'&&method==='GET'){
   const requestedCategory=u.searchParams.get('category')==='beleza'?'corpo':str(u.searchParams.get('category'),64);
   const categories=(await db.prepare(`SELECT c.id,c.name,c.subtitle,COUNT(p.id) total
@@ -263,6 +277,11 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   return json(res,200,{reference:o.id,paymentStatus:o.payment_status,delivery:o.delivery,status:o.status,whatsapp});
  }
  // Uma repeticao nao cria outro pagamento Pix: a chave de idempotencia pertence ao pedido.
+ if(route==='/api/payments/card/retry'&&method==='POST'){
+  if(!await checkoutAllowed(req))return problem(res,503,'Checkout indisponível no momento');
+  if(!checkOrigin(req)||!rate(req,'card-retry',5,900000))return problem(res,403,'Nova tentativa não autorizada');
+  const data=await body(req);try{return json(res,200,await cardCheckoutForOrder(str(data.reference,30),str(data.token,100)))}catch(e){if(e.status>=400&&e.status<500)return problem(res,e.status,e.message);console.warn('[Cartão LA COUR] retry failed: '+String(e.diagnostic||'MP_UNAVAILABLE').slice(0,90));return problem(res,502,'Não foi possível iniciar o pagamento por cartão. Seu pedido continua salvo. Tente novamente ou fale com a LA COUR.')}
+ }
  if(route==='/api/payments/pix/retry'&&method==='POST'){
   if(!await checkoutAllowed(req))return problem(res,503,'Checkout indisponivel para visitantes');
   if(!checkOrigin(req)||!rate(req,'pix-retry',5,900000))return problem(res,403,'Nova tentativa nao autorizada');
@@ -328,11 +347,8 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   if(delivery==='correios'||delivery==='transportadora')liveQuotes.delete(hash(str(data.quoteId,80)));
   // O pedido existe antes de chamar o provedor; o webhook nunca chega sem pedido associado.
   if(payment==='card'){
-   try{
-    const mp=await commerce.createPreference(conf,order,snapshot,token);
-    checkoutUrl=mp.checkoutUrl;mpPreferenceId=mp.preferenceId;
-    await db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(mpPreferenceId,id);
-   }catch(e){return json(res,502,{error:'Pedido registrado, mas o checkout de cartao nao foi gerado. Anote a referencia e procure a loja.',reference:id});}
+   try{const mp=await cardCheckoutForOrder(id,token);checkoutUrl=mp.checkoutUrl}
+   catch(e){console.warn('[Cartão LA COUR] creation failed: '+String(e.diagnostic||'MP_UNAVAILABLE').slice(0,90));return json(res,201,{reference:id,token,mode:'card-retry',notice:'Seu pedido está salvo. Tente abrir o pagamento por cartão novamente ou fale com a LA COUR.'})}
   }
   if(payment==='pix'){
    try{
@@ -426,7 +442,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
  return json(res,200,{total:(await db.prepare('SELECT COUNT(*) n FROM products '+where).get(...args)).n,products:(await db.prepare('SELECT * FROM products '+where+' ORDER BY name LIMIT 30 OFFSET ?').all(...args,(p-1)*30)),page:p});
  }
  if(route==='/api/admin/products'&&method==='POST'){
- const p=await validProduct(await body(req));p.id='custom-'+crypto.randomBytes(12).toString('hex');(await db.prepare('INSERT INTO products(id,name,price,description,category,brand,family,image,sku,stock,weight,width,height,length,active,search_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id,p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text));return json(res,201,{id:p.id});
+ const p=await validProduct(await body(req));p.id='custom-'+crypto.randomBytes(12).toString('hex');(await db.prepare('INSERT INTO products(id,name,price,description,category,brand,family,image,sku,stock,weight,width,height,length,active,search_text,audience) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id,p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,p.audience));return json(res,201,{id:p.id});
  }
  const edit=route.match(/^\/api\/admin\/products\/([\w-]{5,80})$/);
  // Ocultar sem apagar fisicamente: preserva histórico e referências de pedidos.
@@ -435,7 +451,7 @@ async function api(req,res,u){const method=req.method, route=u.pathname;
   return removed.changes?json(res,200,{ok:true,archived:true}):problem(res,404,'Produto não encontrado');
  }
  if(edit&&method==='PUT'){
- if(!(await db.prepare('SELECT id FROM products WHERE id=?').get(edit[1])))return problem(res,404,'Produto não encontrado');const p=await validProduct(await body(req));(await db.prepare('UPDATE products SET name=?,price=?,description=?,category=?,brand=?,family=?,image=?,sku=?,stock=?,weight=?,width=?,height=?,length=?,active=?,search_text=? WHERE id=?').run(p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,edit[1]));return json(res,200,{ok:true});
+ if(!(await db.prepare('SELECT id FROM products WHERE id=?').get(edit[1])))return problem(res,404,'Produto não encontrado');const p=await validProduct(await body(req));(await db.prepare('UPDATE products SET name=?,price=?,description=?,category=?,brand=?,family=?,image=?,sku=?,stock=?,weight=?,width=?,height=?,length=?,active=?,search_text=?,audience=? WHERE id=?').run(p.name,p.price,p.description,p.category,p.brand,p.family,p.image,p.sku,p.stock,p.weight,p.width,p.height,p.length,p.active,p.search_text,p.audience,edit[1]));return json(res,200,{ok:true});
  }
  if(route==='/api/admin/categories'&&method==='GET')return json(res,200,{categories:(await db.prepare('SELECT * FROM categories ORDER BY name').all())});
  if(route==='/api/admin/categories'&&method==='POST'){
