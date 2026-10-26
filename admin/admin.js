@@ -18,7 +18,7 @@ async function showAdminCapabilities(){
 }
 let timeout;
 $('#adminSearch')?.addEventListener('input',()=>{clearTimeout(timeout);timeout=setTimeout(()=>{page=1;listProducts()},300)});
-async function listProducts(){const res=await api('/api/admin/products?'+new URLSearchParams({page,q:$('#adminSearch').value,stock:$('#stockFilter').value}));$('#adminResults').textContent=res.total+' produtos';$('#adminProductList').replaceChildren(...res.products.map(p=>{const r=elem('article',undefined,'admin-record'),i=elem('img'),inf=elem('div',undefined,'info'),btn=elem('button','Editar');i.src=p.image||'/assets/produto-sem-foto.svg';i.alt='';inf.append(elem('strong',p.name),elem('small',`${p.brand} · SKU: ${p.sku||'—'} · ${p.category} · R$ ${Number(p.price||0).toFixed(2)}${p.active?'':' · OCULTO'} · ${p.stock===null?'Estoque não informado':p.stock===0?'Esgotado':p.stock<=5?'Estoque baixo: '+p.stock:p.stock+' unidades'}`));btn.onclick=()=>editProduct(p);
+async function listProducts(){const res=await api('/api/admin/products?'+new URLSearchParams({page,q:$('#adminSearch').value,stock:$('#stockFilter').value}));$('#adminResults').textContent=res.total+' '+(res.total===1?'produto':'produtos');$('#adminProductList').replaceChildren(...res.products.map(p=>{const r=elem('article',undefined,'admin-record'),i=elem('img'),inf=elem('div',undefined,'info'),btn=elem('button','Editar');i.src=p.image||'/assets/produto-sem-foto.svg';i.alt='';inf.append(elem('strong',p.name),elem('small',`${p.brand} · SKU: ${p.sku||'—'} · ${p.category} · R$ ${Number(p.price||0).toFixed(2)}${p.active?'':' · OCULTO'} · ${p.stock===null?'Estoque não informado':p.stock===0?'Esgotado':p.stock<=5?'Estoque baixo: '+p.stock:p.stock+' unidades'}`));btn.onclick=()=>editProduct(p);
  r.append(i,inf,btn);
  if(p.active){const hide=elem('button','Ocultar');hide.className='button-danger';hide.onclick=async()=>{
   if(!confirm('Ocultar '+p.name+' da loja? Você poderá reativar pelo botão Editar.'))return;
@@ -54,7 +54,7 @@ const statusLabels={pedido_criado:'Pedido recebido',aguardando_confirmacao:'Agua
 let orderPage=1,orderTimer,orderRequest=0;
 async function listOrders(){
  const request=++orderRequest;const {orders,total,limit}=await api('/api/admin/orders?'+new URLSearchParams({q:$('#orderSearch').value.trim(),page:String(orderPage),status:$('#orderStatusFilter').value,paymentStatus:$('#orderPaymentFilter').value}));if(request!==orderRequest)return;
- $('#orderCount').textContent=total+' pedidos encontrados';
+ $('#orderCount').textContent=total+' '+(total===1?'pedido encontrado':'pedidos encontrados');
  $('#ordersList').replaceChildren(...orders.map(o=>{
   const r=elem('article',undefined,'order-record'),head=elem('div',undefined,'order-record-head'),title=elem('div');title.append(elem('strong',o.id),elem('small',new Date(o.created).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})));head.append(title,elem('span',statusLabels[o.status]||o.status,'status-pill'));r.append(head);
   const contact=elem('div',undefined,'order-contact');contact.append(elem('strong',o.customer_name),elem('span',o.customer_email||'Sem e-mail'),elem('span',o.phone||''));r.append(contact);
