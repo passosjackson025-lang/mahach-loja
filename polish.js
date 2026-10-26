@@ -39,7 +39,7 @@
   });
  }
  register(document.querySelectorAll('.featured-heading,.featured-card,.about-copy,.about-values li,.collection-strip>div,.lacour-discover>*,.story-intro>*,.story-intro-grid>*,.story-quote,.story-value,.contact-channel,.contact-help>*,.footer-top,.company-details'));
- window.mahachRevealCards=container=>{if(container)register(container.querySelectorAll('.product-card'))};
+ window.mahachRevealCards=container=>{if(container)register(container.querySelectorAll('.product-card,.featured-card'))};
  reduce.addEventListener('change',()=>{
   if(reduce.matches){observer.disconnect();document.querySelectorAll('.motion-item').forEach(el=>el.classList.add('is-visible'));hero?.style.removeProperty('--hero-shift');document.documentElement.style.removeProperty('--petal-shift')}
  });

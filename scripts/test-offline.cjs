@@ -5,6 +5,7 @@ const Module=require('node:module');
 const crypto=require('node:crypto');
 const original=Module._load;
 const history=[];
+const emptyCatalog=process.argv.includes('--empty-catalog'),catalogCount=emptyCatalog?0:1770;
 const salt='abcdef0123456789abcdef0123456789';
 const password='TestPassword_12345!';
 const hash=crypto.scryptSync(password,salt,64).toString('hex');
@@ -16,16 +17,16 @@ class Pool {
   const result=(items)=>({rows:items,rowCount:items.length});
   if(lower.includes('information_schema.tables'))return result(['admins','categories','products','orders','site_settings'].map(table_name=>({table_name})));
   if(lower.includes('create table')||lower.includes('create index')||lower.includes('alter table')||lower==='begin'||lower==='commit'||lower==='rollback')return result([]);
-  if(lower.includes('count(*)'))return result([{n:lower.includes('products')?1770:0}]);
+  if(lower.includes('count(*)'))return result([{n:lower.includes('products')?catalogCount:0}]);
   if(lower.includes('select key,value,encrypted,updated_at from'))return result(fakeSettings);
   if(lower.includes('select * from mahach_stage."admins"'))return result(args[0]==='admin@example.test'?[{email:'admin@example.test',salt,hash}]:[]);
   if(lower.includes('select email,csrf,expires from mahach_stage."sessions"'))return result(sessions.filter(s=>s.token_hash===args[0]&&s.expires>args[1]));
   if(lower.includes('delete from mahach_stage."sessions"')){sessions=sessions.filter(s=>!((lower.includes('expires')&&s.expires<args[0])||(lower.includes('token_hash')&&s.token_hash===args[0])));return result([])}
   if(lower.includes('insert into mahach_stage."sessions"')){sessions.push({token_hash:args[0],email:args[1],csrf:args[2],expires:args[3]});return {rows:[],rowCount:1}}
-  if(lower.includes('from mahach_stage."categories"')&&lower.includes('count(p.id)'))return result([{id:'perfumes',name:'Perfumaria',subtitle:'',total:1770}]);
-  if(lower.includes('from mahach_stage."products"')&&lower.includes('brand'))return result([{brand:'Marca',total:17}]);
-  if(lower.includes('from mahach_stage."products"')&&lower.includes('select id,name,price'))return result([{id:'sample-1',name:'Perfume',price:99,category:'perfumes',brand:'Marca',family:'',image:'',stock:3}]);
-  if(lower.includes('select * from mahach_stage."products"'))return result([{id:'sample-1',name:'Perfume',price:99,category:'perfumes',brand:'Marca',family:'',image:'',stock:3,active:1,description:'',sku:''}]);
+  if(lower.includes('from mahach_stage."categories"')&&lower.includes('count(p.id)'))return result([{id:'perfumes',name:'Perfumaria',subtitle:'',total:catalogCount}]);
+  if(lower.includes('from mahach_stage."products"')&&lower.includes('brand'))return result(emptyCatalog?[]:[{brand:'Marca',total:17}]);
+  if(lower.includes('from mahach_stage."products"')&&lower.includes('select id,name,price'))return result(emptyCatalog?[]:[{id:'sample-1',name:'Perfume',price:99,category:'perfumes',brand:'Marca',family:'',image:'',stock:3}]);
+  if(lower.includes('select * from mahach_stage."products"'))return result(emptyCatalog?[]:[{id:'sample-1',name:'Perfume',price:99,category:'perfumes',brand:'Marca',family:'',image:'',stock:3,active:1,description:'',sku:''}]);
   if(lower.includes('from mahach_stage."categories"'))return result([{id:'perfumes',name:'Perfumaria',subtitle:''}]);
   if(lower.includes('from mahach_stage."orders"'))return result([]);
   if(lower.includes('from mahach_stage."site_settings"'))return result(fakeSettings);
@@ -45,8 +46,9 @@ async function main(){
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const base='http://127.0.0.1:'+server.address().port;
  try{
-  let r=await fetch(base+'/api/health');assert.equal(r.status,200);assert.equal((await r.json()).catalog,1770);
-  r=await fetch(base+'/api/products');assert.equal(r.status,200);const products=await r.json();assert.equal(products.total,1770);assert.equal(products.products.length,1);
+  let r=await fetch(base+'/api/health');assert.equal(r.status,200);assert.equal((await r.json()).catalog,catalogCount);
+  r=await fetch(base+'/api/products');assert.equal(r.status,200);const products=await r.json();assert.equal(products.total,catalogCount);assert.equal(products.products.length,emptyCatalog?0:1);
+  if(emptyCatalog){r=await fetch(base+'/api/products/sample-1');assert.equal(r.status,404)}
   r=await fetch(base+'/api/meta');assert.equal(r.status,200);assert.equal((await r.json()).categories.length,1);
   r=await fetch(base+'/api/admin/stats');assert.equal(r.status,401);
   r=await fetch(base+'/private/mahach.sqlite');assert.equal(r.status,404);
@@ -62,7 +64,7 @@ async function main(){
   r=await fetch(base+'/api/admin/stats',{headers:{Cookie:token}});assert.equal(r.status,200);
   r=await fetch(base+'/api/admin/settings',{method:'PUT',headers:{Cookie:token,Origin:base,'content-type':'application/json','x-csrf-token':body.csrf},body:JSON.stringify({values:{WHATSAPP:'5511999998888'}})});assert.equal(r.status,503);
   assert.equal(history.filter(x=>/\bpublic\./i.test(x.sql)).length,0);
-  console.log('OFFLINE OK: SQL, health, catálogo, login/sessão, configurações, bloqueio privado e checkout desativado.');
+  console.log('OFFLINE OK'+(emptyCatalog?' (CATÁLOGO VAZIO)':'')+': SQL, health, catálogo, login/sessão, configurações, bloqueio privado e checkout desativado.');
  }finally{await new Promise(r=>server.close(r));await db.close()}
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

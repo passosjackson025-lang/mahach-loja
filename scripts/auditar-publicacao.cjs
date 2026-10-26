@@ -31,7 +31,7 @@ function report(name,ok,note=''){console.log((ok?'OK':'ATENÇÃO')+' — '+name+
   console.log('Fotos locais que faltam nesta pasta:',missing.length);
   if(local.length)report('Fotos locais na Render',false,'migre essas fotos para Cloudinary antes do deploy');
   if(missing.length)report('Fotos desaparecidas deste diretório',false,'recupere os arquivos originais, sem apagar referências');
-  if(!count[0].n)report('Catálogo',false,'nenhum produto encontrado');
+  if(!count[0].n)report('Catálogo',true,'vazio; pronto para cadastro manual no painel');
  }catch(e){report('Consulta ao Neon',false,e.message);process.exitCode=1}
  finally{await c.end().catch(()=>{})}
 })();

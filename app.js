@@ -7,24 +7,17 @@ const emptyImage='/assets/produto-sem-foto.svg';
 let categories=[],brands=[],bag={},page=1,search='',category='todos',brand='',sort='featured',currentPage=[],productsById=new Map(),total=0,dialogTriggers=new WeakMap(),dialogScrollY=new WeakMap(),toastTimeout;
 const catalogParams=new URLSearchParams(location.search);
 const current=catalogParams.get('categoria')||(catalogParams.has('q')?'todos':document.body.dataset.category||'todos');
-const featuredImages={
- '6a90e97b833a9316a807092e':'/assets/featured-asad.webp',
- '6a90ec29409abe2003085f0d':'/assets/featured-khamrah.webp',
- '6a911139d4441a8ea109f905':'/assets/featured-oud.webp',
- '6a90eaa593942f9d8b03a044':'/assets/featured-fakhar.webp'
-};
-function img(p){return p.image||featuredImages[p.id]||emptyImage}
+function img(p){return p.image||emptyImage}
 window.laCourProductImage=img;
 async function loadFeatured(){
- await Promise.all($$('[data-featured-product]').map(async card=>{
-  try{
-   const p=(await request('/api/products/'+encodeURIComponent(card.dataset.featuredProduct))).product;
-   productsById.set(p.id,p);
-   const photo=card.querySelector('img');photo.src=img(p);photo.alt='Foto de '+p.name;
-   const price=card.querySelector('[data-featured-price]');price.textContent=p.stock===0?'Sem estoque':money(p.price);
-   card.querySelector('.featured-notes').textContent=p.stock===0?'Consulte outras fragrâncias':card.querySelector('.featured-notes').textContent;
-  }catch{card.querySelector('[data-featured-price]').textContent='Consulte disponibilidade'}
- }));
+ const grid=$('#featuredProducts'),section=$('#destaques');if(!grid||!section)return;
+ try{
+  const {products}=await request('/api/products?category=perfumes&limit=4&sort=featured');
+  for(const p of products)productsById.set(p.id,p);
+  grid.innerHTML=products.map(p=>`<article class="featured-card" data-featured-product="${esc(p.id)}"><a class="featured-image" data-detail="${esc(p.id)}" href="/produtos/index.html?produto=${encodeURIComponent(p.id)}" aria-label="Conhecer ${esc(p.name)}"><img src="${esc(img(p))}" alt="Foto de ${esc(p.name)}" width="400" height="500" loading="lazy"></a><div class="featured-info"><p class="featured-maker">${esc(cleanLabel(p.brand||'LA COUR'))}</p><h3><a data-detail="${esc(p.id)}" href="/produtos/index.html?produto=${encodeURIComponent(p.id)}">${esc(displayName(p))}</a></h3><p class="featured-price" data-featured-price>${p.stock===0?'Sem estoque':money(p.price)}</p><button class="featured-detail" data-quick-add="${esc(p.id)}" aria-label="Adicionar ${esc(p.name)} à sacola" ${p.stock===0?'disabled':''}>${bagIcon}</button></div></article>`).join('');
+  section.hidden=!products.length;
+  if(products.length)window.mahachRevealCards?.(section);
+ }catch{section.hidden=true}
 }
 const sectionLabels={todos:'Todos',arabes:'Árabes',importados:'Importados',nicho:'Nicho',masculino:'Masculino',feminino:'Feminino',unissex:'Unissex'};
 let section=Object.hasOwn(sectionLabels,catalogParams.get('section'))?catalogParams.get('section'):'todos';
@@ -34,7 +27,6 @@ const bagIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14l1 14
 const heartIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 4.7c-2-2-5.2-1.8-7.1.2L12 6.4l-1.4-1.5C8.7 2.9 5.5 2.7 3.5 4.7c-2.1 2.1-2 5.5.1 7.6L12 21l8.4-8.7c2.1-2.1 2.2-5.5.1-7.6Z"/></svg>';
 let favorites=new Set();try{favorites=new Set(JSON.parse(localStorage.getItem('lacour-favorites')||'[]').slice(0,300))}catch{}
 function displayName(p){
- const known={'6a90e97b833a9316a807092e':'Asad','6a90ec29409abe2003085f0d':'Khamrah','6a911139d4441a8ea109f905':'Badee Al Oud — Oud for Glory','6a90eaa593942f9d8b03a044':'Fakhar Black'};if(known[p.id])return known[p.id];
  let text=cleanLabel(p.name).replace(/\b(?:\d+(?:[.,]\d+)?\s*(?:ML|KG|G)|EAU DE PARFUM|EAU DE TOILETTE|EDP|EDT|UNISSEX|UNISEX|MASCULINO|FEMININO|MASC|FEM)\b/gi,' ').replace(/^PERFUME\s+/i,'');
  text=text.replace(/\s+/g,' ').trim();
  for(const part of String(p.brand||'').split('|')){const b=part.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');if(b)text=text.replace(new RegExp('(?:^'+b+'\\s+|\\s+'+b+'$)','ig'),' ').trim()}
@@ -44,7 +36,7 @@ async function quickAdd(id){try{const p=(await request('/api/products/'+encodeUR
 
 function wa(text){return 'https://wa.me/5511940856397?text='+encodeURIComponent(text)}
 function toast(message){const el=$('.toast');if(!el)return;el.textContent=message;el.hidden=false;el.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>{el.classList.remove('show');el.hidden=true},5000)}
-async function request(url,options){const r=await fetch(url,options);const o=await r.json();if(!r.ok)throw Error(o.error||'Não foi possível concluir');return o}
+async function request(url,options){const r=await fetch(url,{cache:'no-store',...options});const o=await r.json();if(!r.ok)throw Error(o.error||'Não foi possível concluir');return o}
 function openDialog(d,trigger=document.activeElement){if(!d?.open){dialogTriggers.set(d,trigger);dialogScrollY.set(d,window.scrollY);d.showModal();document.body.classList.add('modal-open')}}
 function closeDialog(d){if(d?.open)d.close()}
 // Keep display labels clean even for records saved before the CSV emoji cleanup.
@@ -127,6 +119,7 @@ async function loadProducts({preserveY}={}){
  try{const out=await request('/api/products?'+qs);if(requestId!==catalogRequestId)return;total=out.total;currentPage=out.products;for(const p of currentPage)productsById.set(p.id,p);
  grid.innerHTML=currentPage.map(p=>`<article class="product-card"><div class="product-photo"><button data-detail="${esc(p.id)}" class="detail-open" aria-label="Conhecer ${esc(p.name)}"><img src="${esc(img(p))}" alt="${img(p)!==emptyImage?'Foto de '+esc(p.name):'Foto indisponível'}" width="800" height="1000" loading="lazy"></button><button class="product-favorite" data-favorite="${esc(p.id)}" aria-label="Favoritar ${esc(displayName(p))}" aria-pressed="${favorites.has(p.id)}">${heartIcon}</button></div><div class="product-info"><h3><button data-detail="${esc(p.id)}" title="${esc(p.name)}">${esc(displayName(p))}</button></h3><p>${esc(cleanLabel(p.brand||'LA COUR'))}</p><span class="price">${money(p.price)}</span><button class="quick-add" data-quick-add="${esc(p.id)}" aria-label="Adicionar ${esc(displayName(p))} à sacola" ${p.stock===0?'disabled':''}>${bagIcon}</button></div></article>`).join('');
  window.mahachRevealCards?.(grid);$('#resultCount').textContent=`${Number(total).toLocaleString('pt-BR')} ${total===1?'produto':'produtos'}`;$('#emptySearch').hidden=!!currentPage.length;
+ if(!currentPage.length){const empty=categories.every(c=>Number(c.total)===0);$('#emptySearch h2').textContent=empty?'Nossa seleção está sendo preparada.':'Nenhum produto encontrado.';$('#emptySearch p').textContent=empty?'Em breve, novos produtos para descobrir.':'Tente outro termo ou ajuste os filtros.';$('#resetFilters').hidden=empty}
  $('#activeFilters').textContent=[section!=='todos'&&sectionLabels[section],...selectedBrands,priceLow>0&&'A partir de '+money(priceLow),priceHigh!==null&&'Até '+money(priceHigh)].filter(Boolean).join(' · ');
  renderPagination();keepCatalogPosition(preserveY);
  }catch(e){if(requestId!==catalogRequestId)return;grid.innerHTML='<p>Não foi possível carregar os produtos. Tente novamente em instantes.</p>';$('#resultCount').textContent='Catálogo indisponível';console.warn(e)}finally{if(requestId===catalogRequestId)grid.classList.remove('catalog-changing')}

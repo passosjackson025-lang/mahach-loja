@@ -47,8 +47,8 @@ async function bootstrap(){
  // Verifica as cinco tabelas importadas. Nunca cria o catálogo no schema public.
  const res=await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema='mahach_stage' AND table_name = ANY($1)",[['admins','categories','products','orders','site_settings']]);
  if(res.rows.length!==5)throw Error('Staging incompleto no Neon: importe e valide as cinco tabelas antes de iniciar o servidor');
- const n=await query('SELECT COUNT(*) AS n FROM products');
- if(!n.rows[0]?.n)throw Error('Staging sem produtos. Inicialização bloqueada por segurança.');
+ // O catálogo pode estar vazio enquanto a loja cadastra os produtos manualmente.
+ // A validação das tabelas acima continua obrigatória; nunca reimportar produtos aqui.
  // As sessões de login são novas, nunca copiadas do SQLite.
  await pool.query(`CREATE TABLE IF NOT EXISTS mahach_stage.sessions (
    token_hash TEXT PRIMARY KEY,email TEXT NOT NULL REFERENCES mahach_stage.admins(email),csrf TEXT NOT NULL,expires BIGINT NOT NULL
